@@ -1,0 +1,639 @@
+/**
+ * C++ IDE - Base Component Stylesheet
+ * 
+ * Alternative base styles with custom mascot and bubble decorations.
+ * Import this file for a more decorated UI variant.
+ * 
+ * @author Project IDE Team
+ * @license MIT
+ */
+
+@import '../assets/fonts.css';
+@import './animations.css';
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    /* Light Theme Color Palette - Dimmed for comfort */
+    --bg-ocean-light: #d0e5f5;
+    --bg-ocean-medium: #a0cce8;
+    --bg-ocean-deep: #6ab0d8;
+    --bg-ocean-dark: #3a7ca5;
+
+    --bg-glass: rgba(220, 235, 250, 0.88);
+    --bg-glass-heavy: rgba(210, 230, 248, 0.94);
+    --bg-glass-border: rgba(180, 215, 240, 0.85);
+
+    --accent: #eb6b9d;
+    --accent-hover: #ff8fb8;
+    --text-primary: #2a5a75;
+    --text-secondary: #5a8a95;
+    --text-muted: #7aa5b5;
+
+    --success: #8cc990;
+    --error: #ff8fab;
+    --warning: #f0c8c0;
+
+    --border: #a0d0ea;
+    --border-strong: #6ab0d8;
+
+    --shadow-soft: 0 8px 32px rgba(100, 160, 200, 0.30);
+    --shadow-card: 0 4px 12px rgba(100, 160, 200, 0.20);
+    --glow: 0 0 15px rgba(100, 160, 200, 0.4);
+
+    --header-height: 54px;
+    --statusbar-height: 28px;
+    --radius: 20px;
+    --radius-sm: 12px;
+}
+
+body {
+    font-family: var(--font-ui, 'Nunito', sans-serif);
+    background-color: var(--bg-ocean-light);
+    /* Default Background Image - moved to pseudo-element for opacity support */
+    background-image: none;
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+    font-size: 14px;
+    user-select: none;
+    position: relative;
+    z-index: 0;
+}
+
+/* App background image with opacity support using pseudo-element */
+/* 
+ * Opacity and blur are applied to the same layer. This is intentional:
+ * - When opacity = 100%, you see the full blurred image
+ * - When opacity = 50%, the blurred image is 50% transparent
+ * - Blur affects the image BEFORE opacity is applied
+ * 
+ * To have a very visible blur with low opacity on the image itself,
+ * increase both blur AND opacity together.
+ */
+body::before {
+    content: '';
+    position: fixed;
+    inset: calc(-1 * var(--app-bg-blur, 0px));
+    /* Extend beyond viewport to prevent blur edge artifacts */
+    background-image: var(--app-bg-image);
+    background-repeat: no-repeat;
+    background-position: var(--app-bg-position, center center);
+    background-size: cover;
+    background-attachment: fixed;
+    opacity: var(--app-bg-opacity, 0.5);
+    filter: blur(var(--app-bg-blur, 0px)) brightness(var(--app-bg-brightness, 1));
+    z-index: -1;
+    pointer-events: none;
+}
+
+/* Mascot Decoration - DISABLED: File not found, re-enable when mascot asset is added */
+/*
+body::after {
+    content: '';
+    position: fixed;
+    bottom: -20px;
+    right: -20px;
+    width: 400px;
+    height: 600px;
+    background: url('../assets/sameko_mascot.png') no-repeat bottom right;
+    background-size: contain;
+    opacity: 0.9;
+    pointer-events: none;
+    z-index: 0;
+    transition: transform 0.3s ease;
+}
+*/
+
+.app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background: radial-gradient(circle at center, transparent 0%, rgba(188, 226, 245, 0.3) 100%);
+    /* backdrop-filter: blur(2px); REMOVED: Causes 4K backgrounds to look blurry */
+    position: relative;
+    z-index: 1;
+}
+
+/* Split Resizer */
+#resizer-split {
+    width: 10px;
+    cursor: col-resize;
+    /* Better visibility for separator */
+    background: rgba(136, 201, 234, 0.1);
+    display: none;
+    flex-shrink: 0;
+    transition: background var(--duration-fast);
+    position: relative;
+    z-index: 100;
+    /* Ensure it doesn't get overridden by user agent or other styles */
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#resizer-split:hover,
+#resizer-split.dragging {
+    background: rgba(136, 201, 234, 0.4);
+}
+
+/* Handle for resizer */
+#resizer-split::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 4px;
+    height: 32px;
+    background: var(--bg-ocean-deep);
+    border-radius: 2px;
+    opacity: 0.8;
+    /* Increased visibility */
+    transition: opacity var(--duration-fast);
+}
+
+#resizer-split:hover::after,
+#resizer-split.dragging::after {
+    opacity: 1;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(100, 120, 140, 0.4);
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 120, 140, 0.6);
+}
+
+::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* ===== HEADER ===== */
+.header-bar {
+    display: flex;
+    align-items: center;
+    height: var(--header-height);
+    background: var(--bg-glass-heavy);
+    border-bottom: 2px solid var(--border-glass-edge, rgba(255, 255, 255, 0.4));
+    padding: 0 16px;
+    gap: 16px;
+    -webkit-app-region: drag;
+    z-index: 100;
+}
+
+.logo {
+    font-family: var(--font-heading, 'Fredoka', sans-serif);
+    font-weight: 600;
+    font-size: 20px;
+    color: white;
+    padding: 8px 16px;
+    background: var(--bg-ocean-deep);
+    border: 2px solid var(--border-glass-edge, rgba(255, 255, 255, 0.4));
+    border-radius: 30px;
+    -webkit-app-region: no-drag;
+    letter-spacing: 0.5px;
+}
+
+.menu-group {
+    display: flex;
+    gap: 4px;
+    -webkit-app-region: no-drag;
+    background: var(--bg-button, white);
+    padding: 4px;
+    border-radius: 12px;
+}
+
+.menu-btn {
+    padding: 6px 14px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    color: var(--btn-text, var(--text-secondary));
+    cursor: pointer;
+    font-family: var(--font-ui, 'Nunito', sans-serif);
+    font-size: 14px;
+    font-weight: 700;
+    transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard);
+}
+
+.menu-btn:hover {
+    background: var(--btn-bg-hover, var(--bg-ocean-light));
+    color: var(--btn-text-hover, var(--bg-ocean-dark));
+    transform: translateY(-1px);
+}
+
+.menu-btn.active {
+    background: var(--btn-primary-bg, var(--bg-ocean-deep));
+    color: var(--btn-primary-text, white);
+    transform: scale(0.95);
+}
+
+/* Tabs */
+.tabs-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    overflow: hidden;
+    -webkit-app-region: drag;
+    padding-left: 10px;
+}
+
+.tabs-container {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 4px 0;
+    -webkit-app-region: no-drag;
+}
+
+.tabs-container::-webkit-scrollbar {
+    height: 0;
+}
+
+.tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+    background: white;
+    border: 2px solid var(--border-glass-edge, rgba(255, 255, 255, 0.4));
+    border-radius: 20px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+    transition: transform var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.tab:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+    color: var(--bg-ocean-dark);
+}
+
+.tab.active {
+    background: var(--bg-ocean-medium);
+    border-color: var(--bg-ocean-deep);
+    color: var(--text-primary);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.tab-x {
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: var(--text-muted);
+    font-weight: 800;
+    font-size: 12px;
+    opacity: 0.6;
+    transition: opacity 0.2s, background-color 0.2s, color 0.2s;
+}
+
+.tab:hover .tab-x {
+    opacity: 1;
+}
+
+.tab-x:hover {
+    background: var(--error);
+    color: white;
+}
+
+.tab-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+}
+
+.tab-add {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    border: 2px dashed var(--bg-ocean-medium);
+    border-radius: 50%;
+    color: var(--bg-ocean-deep);
+    cursor: pointer;
+    font-size: 18px;
+    font-weight: 800;
+    transition: background-color var(--duration-fast), border-style var(--duration-fast), border-color var(--duration-fast), transform var(--duration-fast);
+}
+
+.tab-add:hover {
+    background: var(--bg-ocean-medium);
+    border-style: solid;
+    border-color: var(--border-strong);
+    transform: rotate(90deg);
+}
+
+/* Header Actions */
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    -webkit-app-region: no-drag;
+}
+
+.toggle-btn {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-button, white);
+    border: 2px solid transparent;
+    border-radius: 12px;
+    color: var(--accent, var(--bg-ocean-deep));
+    cursor: pointer;
+    transition: background-color var(--duration-fast), transform var(--duration-fast), color var(--duration-fast), box-shadow var(--duration-fast);
+}
+
+.toggle-btn:hover {
+    background: var(--btn-bg-hover, var(--bg-ocean-light));
+    transform: scale(1.05);
+}
+
+.toggle-btn.active {
+    background: var(--btn-primary-bg, var(--bg-ocean-medium));
+    color: var(--btn-primary-text, var(--text-primary));
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.action-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: var(--bg-button, white);
+    border: 2px solid var(--border, var(--bg-ocean-medium));
+    border-radius: 20px;
+    color: var(--btn-text, var(--bg-ocean-dark));
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    transition: transform var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard);
+}
+
+.action-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(136, 201, 234, 0.3);
+}
+
+.action-btn.primary {
+    background: var(--bg-ocean-deep);
+    border-color: var(--bg-ocean-deep);
+    color: white;
+}
+
+.action-btn.primary:hover {
+    background: var(--bg-ocean-dark);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.win-btns {
+    display: flex;
+    -webkit-app-region: no-drag;
+}
+
+.win-btn {
+    width: 48px;
+    height: var(--header-height);
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: 0.15s;
+}
+
+.win-btn:hover {
+    background: var(--bg-ocean-medium);
+    color: white;
+}
+
+.win-btn.close:hover {
+    background: var(--error);
+    border-bottom-left-radius: 12px;
+}
+
+/* ===== MAIN CONTENT ===== */
+.main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    gap: 12px;
+    padding: 12px;
+    position: relative;
+}
+
+/* Editor Area - Floating Glass Card */
+.editor-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 300px;
+    background: var(--bg-glass);
+    border: 2px solid var(--border-glass-edge, rgba(255, 255, 255, 0.4));
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+    backdrop-filter: blur(10px);
+    overflow: hidden;
+    /* Fix corner gaps */
+    border-bottom-left-radius: var(--radius);
+    border-bottom-right-radius: var(--radius);
+}
+
+/* Fix inner elements respecting radius */
+.problems-panel>*,
+.terminal-section>*,
+.io-section>* {
+    max-width: 100%;
+}
+
+.editor-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.editor-area {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: var(--radius-sm);
+    margin: 6px;
+    overflow: hidden;
+    border: 1px solid var(--border-glass-edge, rgba(255, 255, 255, 0.8));
+}
+
+/* Panels (Problems, Terminal) */
+.problems-panel {
+    background: var(--bg-glass-heavy);
+    border-top: 2px solid var(--border-glass-edge, rgba(255, 255, 255, 0.4));
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.panel-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    background: var(--bg-panel, rgba(239, 248, 254, 0.8));
+    border-bottom: 2px solid var(--border-glass-edge, rgba(255, 255, 255, 0.4));
+}
+
+.panel-title {
+    font-family: var(--font-heading, 'Fredoka', sans-serif);
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 8px;
+    transition: var(--duration-fast);
+}
+
+.panel-title:hover {
+    background: white;
+    color: var(--bg-ocean-dark);
+}
+
+.terminal-section,
+.io-section {
+    background: var(--bg-glass-heavy);
+    border: 2px solid var(--border-glass-edge, rgba(255, 255, 255, 0.4));
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.terminal-body {
+    background: var(--terminal-bg, #1e2933);
+    color: var(--text-primary, #e0f0ff);
+    flex: 1;
+    /* flex items default to min-height:auto — without this the body refuses to
+       shrink when the input row auto-grows, and the input gets pushed/clipped. */
+    min-height: 0;
+    padding: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: var(--panel-font-size, 13px);
+    overflow-y: auto;
+}
+
+/* Dialogs / Dropdowns */
+.dropdown {
+    background: var(--bg-panel, white);
+    border: 2px solid var(--border);
+    border-radius: 16px;
+    box-shadow: 0 10px 40px rgba(136, 201, 234, 0.25);
+    padding: 8px;
+    display: none;
+    position: absolute;
+    z-index: 1000;
+}
+
+.dropdown.show {
+    display: block;
+    animation: scaleIn var(--duration-fast) var(--ease-out-expo);
+}
+
+.dropdown-item {
+    padding: 10px 16px;
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-weight: 600;
+    display: flex;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: var(--duration-instant);
+}
+
+.dropdown-item:hover {
+    background: var(--btn-bg-hover, var(--bg-ocean-light));
+    color: var(--btn-text-hover, var(--bg-ocean-dark));
+}
+
+
+
+/* Welcome Screen */
+.welcome {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 2;
+}
+
+.welcome-box {
+    text-align: center;
+    background: var(--bg-panel, white);
+    padding: 40px 60px;
+    border-radius: 30px;
+    box-shadow: 0 20px 60px rgba(136, 201, 234, 0.3);
+    border: 4px solid var(--border, var(--bg-ocean-light));
+    max-width: 500px;
+}
+
+.welcome-box h1 {
+    font-family: var(--font-heading, 'Fredoka', sans-serif);
+    font-size: 42px;
+    background: linear-gradient(135deg, var(--bg-ocean-deep), var(--bg-ocean-dark));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 10px;
+}
+
+.welcome-box p {
+    color: var(--text-secondary);
+    font-size: 16px;
+    margin-bottom: 30px;
+}
+
+.welcome-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: 2px solid var(--bg-ocean-medium);
+    border-radius: 20px;
+    color: var(--bg-ocean-dark);
+    font-weight: 700;
+    padding: 20px 30px;
+    width: 140px;
+    transition: transform var(--duration-fast), background-color var(--duration-fast), border-color var(--duration-fast), box-shadow var(--duration-fast);
+}
+
+.welcome-btn:hover {
+    transform: translateY(-5px) rotate(-2deg);
+    background: white;
+    border-color: var(--bg-ocean-deep);
+    box-shadow: 0 8px 20px rgba(136, 201, 234, 0.2);
+}

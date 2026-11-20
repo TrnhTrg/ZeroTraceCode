@@ -1,0 +1,437 @@
+/* ========================================
+   SNIPPET EDITOR MODAL
+   Uses CSS variables for theme compatibility
+   ======================================== */
+
+.snippet-editor-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.snippet-editor-modal.active {
+    display: flex;
+    pointer-events: auto;
+}
+
+.snippet-editor-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+}
+
+.snippet-editor-container {
+    position: relative;
+    z-index: 10001;
+    background: var(--bg-glass-heavy, #ffffff);
+    border-radius: 20px;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.3);
+    width: 90%;
+    max-width: 700px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    border: 2px solid var(--border-strong, #88c9ea);
+    overflow: hidden;
+    animation: snippetPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes snippetPop {
+    from {
+        transform: scale(0.9) translateY(20px);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1) translateY(0);
+        opacity: 1;
+    }
+}
+
+.snippet-editor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 2px dashed var(--border, #cceeff);
+    background: var(--bg-ocean-light, #eff8fe);
+}
+
+.snippet-editor-header h2 {
+    margin: 0;
+    font-size: 1.3em;
+    color: var(--bg-ocean-dark, #3a7ca5);
+    font-weight: 800;
+    font-family: var(--font-heading, 'Fredoka', sans-serif);
+}
+
+.btn-close-snippet-editor {
+    background: white;
+    border: 2px solid var(--border, #cceeff);
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s, color 0.2s, transform 0.2s, border-color 0.2s;
+    color: var(--text-secondary);
+}
+
+.btn-close-snippet-editor:hover {
+    background: var(--error, #ff8fab);
+    color: white;
+    transform: rotate(90deg);
+    border-color: var(--border);
+}
+
+.snippet-editor-body {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+    background: var(--bg-glass, rgba(240, 248, 255, 0.5));
+}
+
+.snippet-field {
+    margin-bottom: 20px;
+}
+
+.snippet-field label {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-size: 0.95em;
+    font-family: var(--font-ui, 'Nunito', sans-serif);
+}
+
+.snippet-field input[type="text"] {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid var(--border, #cceeff);
+    border-radius: 12px;
+    background: white;
+    color: var(--text-primary);
+    font-size: 1em;
+    font-family: 'JetBrains Mono', monospace;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-sizing: border-box;
+}
+
+.snippet-field input[type="text"]:focus {
+    outline: none;
+    border-color: var(--bg-ocean-deep, #88c9ea);
+    box-shadow: 0 0 0 4px rgba(136, 201, 234, 0.2);
+}
+
+#snippet-content-editor {
+    border-radius: 12px;
+    overflow: hidden;
+    border: 2px solid var(--border, #cceeff);
+    background: #1a2530 !important;
+    /* Keep editor dark for contrast */
+}
+
+.snippet-editor-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 18px 24px;
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+}
+
+.snippet-tips {
+    margin-top: 16px;
+    padding: 12px;
+    background: rgba(var(--accent-rgb, 136, 201, 234), 0.05);
+    border: 1px dashed var(--border, #cceeff);
+    border-radius: 12px;
+}
+
+.tips-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 800;
+    font-size: 0.85em;
+    color: var(--bg-ocean-dark, #3a7ca5);
+    margin-bottom: 6px;
+    font-family: var(--font-heading, 'Fredoka', sans-serif);
+}
+
+.tips-content {
+    font-size: 0.8em;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.tips-content code {
+    background: var(--bg-ocean-light);
+    padding: 2px 4px;
+    border-radius: 4px;
+    color: var(--accent-color);
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+}
+
+.tips-examples {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border-color);
+}
+
+.tips-examples pre {
+    background: var(--bg-ocean-light, #f0f9ff);
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin: 6px 0 12px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85em;
+    color: var(--accent-color);
+    border: 1px solid var(--border);
+    white-space: pre-wrap;
+    overflow-x: auto;
+}
+
+.btn-secondary,
+.btn-primary {
+    padding: 10px 24px;
+    border-radius: 20px;
+    font-weight: 700;
+    font-size: 0.95em;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s, transform 0.2s, box-shadow 0.2s;
+    font-family: var(--font-ui, 'Nunito', sans-serif);
+    border: 2px solid transparent;
+}
+
+.btn-secondary {
+    background: white;
+    color: var(--text-secondary);
+    border-color: var(--border, #cceeff);
+}
+
+.btn-secondary:hover {
+    background: var(--bg-ocean-medium);
+    color: var(--text-primary);
+}
+
+.btn-primary {
+    background: var(--bg-ocean-deep, #88c9ea);
+    color: white;
+    border-color: var(--bg-ocean-deep);
+}
+
+.btn-primary:hover {
+    background: var(--bg-ocean-dark);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(58, 124, 165, 0.3);
+}
+
+/* ========================================
+   SNIPPETS LIST IN SETTINGS
+   ======================================== */
+
+.snippets-list-container {
+    background: var(--bg-glass, rgba(245, 248, 250, 0.8));
+    border: 1px solid var(--border, #e0e0e0);
+    border-radius: 12px;
+    padding: 12px;
+    height: 400px;
+    min-height: 200px;
+    overflow-y: auto;
+}
+
+/* Snippet item row */
+.snippet-item {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg-input, #fff);
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    border-radius: 10px;
+    border: 1px solid var(--border, #e5e5e5);
+    transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.snippet-item:last-child {
+    margin-bottom: 0;
+}
+
+.snippet-item:hover {
+    border-color: var(--accent, #88c9ea);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.snippet-item.builtin {
+    background: var(--bg-ocean-light, #f5f8fa);
+    border-left: 3px solid var(--text-muted, #aaa);
+}
+
+.snippet-item:not(.builtin) {
+    border-left: 3px solid var(--accent, #88c9ea);
+}
+
+.snippet-trigger {
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
+    font-weight: 600;
+    color: var(--accent, #3a7ca5);
+    padding: 5px 12px;
+    background: var(--bg-ocean-light, #eef4f8);
+    border-radius: 6px;
+    font-size: 0.85em;
+    min-width: 70px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.snippet-preview {
+    font-family: 'Consolas', 'Monaco', monospace;
+    color: var(--text-secondary, #666);
+    font-size: 0.85em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.85;
+}
+
+.snippet-actions {
+    display: flex;
+    gap: 6px;
+    opacity: 0.6;
+    transition: opacity 0.15s;
+}
+
+.snippet-item:hover .snippet-actions {
+    opacity: 1;
+}
+
+.snippet-actions button {
+    background: var(--bg-ocean-light, #f0f4f7);
+    border: 1px solid var(--border, #ddd);
+    cursor: pointer;
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s, background-color 0.15s, color 0.15s, border-color 0.15s;
+    color: var(--text-secondary, #777);
+}
+
+.snippet-actions button:hover {
+    transform: scale(1.05);
+}
+
+.snippet-actions .btn-edit:hover {
+    background: var(--bg-ocean-medium, #dbe8f0);
+    color: var(--accent, #3a7ca5);
+    border-color: var(--accent, #88c9ea);
+}
+
+.snippet-actions .btn-delete:hover {
+    background: var(--error, #ff6b6b);
+    color: white;
+    border-color: var(--error, #ff6b6b);
+}
+
+/* Add (primary) and Import (outlined) side by side; text colours are the theme's button
+ * tokens, so a bright accent gets dark text instead of white. */
+.snippet-buttons {
+    display: flex;
+    gap: 10px;
+    margin: 14px 0 16px;
+}
+
+.btn-add-snippet {
+    flex: 1;
+    padding: 11px 16px;
+    background: var(--btn-primary-bg, var(--accent));
+    color: var(--btn-primary-text, #fff);
+    border: 2px solid var(--btn-primary-bg, var(--accent));
+    border-radius: 12px;
+    cursor: pointer;
+    font-family: var(--font-heading, 'Fredoka', sans-serif);
+    font-weight: 600;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: background-color 0.2s, border-color 0.2s, color 0.2s, transform 0.2s;
+}
+
+.btn-add-snippet:hover {
+    background: var(--btn-primary-bg-hover, var(--accent-hover));
+    border-color: var(--btn-primary-bg-hover, var(--accent-hover));
+    transform: translateY(-1px);
+}
+
+.btn-add-snippet.secondary {
+    background: transparent;
+    color: var(--text-primary);
+    border-color: var(--border);
+}
+
+.btn-add-snippet.secondary:hover {
+    background: var(--bg-button-hover);
+    border-color: var(--accent);
+}
+
+/* Empty state */
+.snippets-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+    text-align: center;
+    color: var(--text-muted, #999);
+}
+
+.snippets-empty svg {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 12px;
+    opacity: 0.4;
+    color: var(--accent, #88c9ea);
+}
+
+/* Dark Theme Adjustments */
+[data-theme-variant="dark"] .snippet-item {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme-variant="dark"] .snippet-trigger {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--accent);
+}
+
+[data-theme-variant="dark"] .snippet-actions button {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+[data-theme-variant="dark"] .snippets-list-container {
+    background: rgba(0, 0, 0, 0.2);
+    border-color: rgba(255, 255, 255, 0.1);
+}

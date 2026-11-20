@@ -1,0 +1,671 @@
+/**
+ * Local History Module
+ * 
+ * Provides automatic backup of files before saving to prevent accidental data loss.
+ * Features:
+ * - Async backup creation (non-blocking)
+ * - Hash-based change detection (only saves when content changes)
+ * - Configurable limits (max versions, max age, max file size)
+ * - UI for viewing and restoring history
+ * 
+ * @author Sameko IDE Team
+ */
+
+const LocalHistory = {
+    // Settings with defaults
+    settings: {
+        enabled: true,
+        maxVersions: 20,
+        maxAgeDays: 7,
+        maxFileSizeKB: 1024 // 1MB
+    },
+
+    // Cache of file hashes to avoid redundant backups
+    hashCache: new Map(),
+
+    // Debounce untitled checkpoint creation
+    untitledTimers: new Map(),
+
+    /**
+     * Initialize Local History module
+     */
+    init() {
+        this.loadSettings();
+    },
+
+    /**
+     * Load settings from App.settings
+     */
+    loadSettings() {
+        if (typeof App !== 'undefined' && App.settings && App.settings.localHistory) {
+            this.settings = { ...this.settings, ...App.settings.localHistory };
+        }
+    },
+
+    /**
+     * Save current settings to App.settings
+     */
+    saveSettings() {
+        if (typeof App !== 'undefined') {
+            App.settings.localHistory = { ...this.settings };
+        }
+    },
+
+    /**
+     * Fingerprint for "did the text change since the last checkpoint": length plus
+     * two independent 32-bit hashes. The single Java-style hash it replaces gave
+     * the same value for edits as small as renaming `Aa` to `BB`, so such a save
+     * got no checkpoint.
+     * @param {string} str - Content to hash
+     * @returns {string}
+     */
+    simpleHash(str) {
+        let h1 = 0, h2 = 0x811c9dc5;
+        for (let i = 0; i < str.length; i++) {
+            const c = str.charCodeAt(i);
+            h1 = (Math.imul(h1, 31) + c) | 0;
+            h2 = Math.imul(h2 ^ c, 16777619);
+        }
+        return `${str.length}:${(h1 >>> 0).toString(16)}:${(h2 >>> 0).toString(16)}`;
+    },
+
+    /** True if `content` differs from the last checkpoint written for `filePath`. */
+    hasContentChanged(filePath, content) {
+        return this.hashCache.get(filePath) !== this.simpleHash(content);
+    },
+
+    /**
+     * Create a backup before saving (async, non-blocking)
+     * @param {string} filePath - Path to file being saved
+     * @param {string} content - Current file content
+     * @returns {Promise<object>} - Result of backup operation
+     */
+    async createBackup(filePath, content) {
+        // Check if enabled
+        if (!this.settings.enabled) {
+            return { success: false, reason: 'disabled' };
+        }
+
+        // Check file size
+        const sizeKB = new Blob([content]).size / 1024;
+        if (sizeKB > this.settings.maxFileSizeKB) {
+            return { success: false, reason: 'file_too_large' };
+        }
+
+        // Check if content actually changed
+        if (!this.hasContentChanged(filePath, content)) {
+            return { success: false, reason: 'no_changes' };
+        }
+
+        // Call main process to create backup
+        try {
+            const result = await window.electronAPI.createHistoryBackup({
+                filePath,
+                content,
+                maxVersions: this.settings.maxVersions,
+                maxAgeDays: this.settings.maxAgeDays
+            });
+            // Remember the text only once it is stored: after a failed write the
+            // same text must still get its checkpoint on the next save.
+            if (result && result.success !== false) this.hashCache.set(filePath, this.simpleHash(content));
+
+            return result;
+        } catch (error) {
+            console.error('[LocalHistory] Backup error:', error);
+            return { success: false, reason: 'error', error: error.message };
+        }
+    },
+
+    /**
+     * Get history entries for a file
+     * @param {string} filePath - Path to file
+     * @returns {Promise<Array>} - List of history entries
+     */
+    async getHistory(filePath) {
+        if (!filePath) return [];
+
+        try {
+            const result = await window.electronAPI.getFileHistory(filePath);
+            return result.success && result.entries ? result.entries : [];
+        } catch (error) {
+            console.error('[LocalHistory] Get history failed:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Get content of a specific history entry
+     * @param {string} backupPath - Path to backup file
+     * @returns {Promise<string|null>} - Content or null if failed
+     */
+    async getHistoryContent(backupPath) {
+        try {
+            const result = await window.electronAPI.getHistoryContent(backupPath);
+            return result.success ? result.content : null;
+        } catch (error) {
+            console.error('[LocalHistory] Get content failed:', error);
+            return null;
+        }
+    },
+
+    /**
+     * Restore a file from history
+     * @param {string} filePath - Original file path
+     * @param {string} backupPath - Path to backup to restore
+     * @returns {Promise<object>} - Result
+     */
+    async restoreFromHistory(filePath, backupPath) {
+        try {
+            const content = await this.getHistoryContent(backupPath);
+            if (content === null) {
+                return { success: false, error: 'Could not read backup' };
+            }
+
+            // Update hash cache with restored content
+            this.hashCache.set(filePath, this.simpleHash(content));
+
+            return { success: true, content };
+        } catch (error) {
+            console.error('[LocalHistory] Restore failed:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
+    /**
+     * Delete all history for a file
+     * @param {string} filePath - Path to file
+     * @returns {Promise<object>} - Result
+     */
+    async clearHistory(filePath) {
+        try {
+            const result = await window.electronAPI.clearFileHistory(filePath);
+            return result;
+        } catch (error) {
+            console.error('[LocalHistory] Clear history failed:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
+    /** Name of the state document holding an untitled tab's checkpoints. */
+    getUntitledStateName(tabOrKey) {
+        const key = typeof tabOrKey === 'string' ? tabOrKey : tabOrKey?.untitledHistoryKey;
+        return key ? `untitled-${String(key).replace(/[^A-Za-z0-9_.-]/g, '_')}` : null;
+    },
+
+    /** Key an older version used in localStorage (read once, then removed). */
+    getLegacyUntitledStorageKey(tabOrKey) {
+        const key = typeof tabOrKey === 'string' ? tabOrKey : tabOrKey?.untitledHistoryKey;
+        return key ? `untitled-history:${key}` : null;
+    },
+
+    ensureUntitledKey(tab) {
+        if (!tab) return null;
+        if (!tab.untitledHistoryKey) {
+            tab.untitledHistoryKey = 'untitled_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+        }
+        return tab.untitledHistoryKey;
+    },
+
+    async getUntitledHistory(tabOrKey) {
+        const name = this.getUntitledStateName(tabOrKey);
+        if (!name) return [];
+
+        try {
+            let entries = window.electronAPI?.stateRead ? await window.electronAPI.stateRead(name) : null;
+            if (!Array.isArray(entries)) {
+                const legacyKey = this.getLegacyUntitledStorageKey(tabOrKey);
+                const raw = legacyKey ? localStorage.getItem(legacyKey) : null;
+                entries = raw ? JSON.parse(raw) : [];
+                if (legacyKey) localStorage.removeItem(legacyKey);
+            }
+            return Array.isArray(entries) ? entries : [];
+        } catch (error) {
+            console.error('[LocalHistory] Failed to read untitled history:', error);
+            return [];
+        }
+    },
+
+    async saveUntitledHistory(tabOrKey, entries) {
+        const name = this.getUntitledStateName(tabOrKey);
+        if (!name || !window.electronAPI?.stateWrite) return;
+
+        try {
+            const result = await window.electronAPI.stateWrite(name, entries);
+            return !(result && result.success === false);
+        } catch (error) {
+            console.error('[LocalHistory] Failed to save untitled history:', error);
+            return false;
+        }
+    },
+
+    async createUntitledBackup(tab, content) {
+        if (!this.settings.enabled || !tab || tab.path) {
+            return { success: false, reason: 'not_untitled' };
+        }
+
+        const untitledKey = this.ensureUntitledKey(tab);
+        const hashKey = `untitled:${untitledKey}`;
+        const sizeKB = new Blob([content]).size / 1024;
+        if (sizeKB > this.settings.maxFileSizeKB) {
+            return { success: false, reason: 'file_too_large' };
+        }
+
+        const currentHash = this.simpleHash(content);
+        if (this.hashCache.get(hashKey) === currentHash) {
+            return { success: false, reason: 'no_changes' };
+        }
+
+        // Clear History during the read below must win: the entries read before
+        // it would otherwise be written back.
+        const clears = (this.untitledClears ||= new Map());
+        const generation = clears.get(untitledKey) || 0;
+        const entries = await this.getUntitledHistory(untitledKey);
+        if ((clears.get(untitledKey) || 0) !== generation) {
+            return { success: false, reason: 'cleared' };
+        }
+        entries.unshift({
+            id: 'backup_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+            content,
+            timestamp: Date.now(),
+            formattedTime: new Date().toLocaleString(),
+            size: `${Math.max(1, Math.round(sizeKB))} KB`
+        });
+
+        if (!await this.saveUntitledHistory(untitledKey, entries.slice(0, this.settings.maxVersions))) {
+            return { success: false, reason: 'error' };
+        }
+        this.hashCache.set(hashKey, currentHash);
+        return { success: true };
+    },
+
+    /** Back up an untitled tab 12 s after its last edit (`content` defaults to its text then). */
+    scheduleUntitledBackup(tab, content) {
+        if (!tab || tab.path || !this.settings.enabled) return;
+
+        const untitledKey = this.ensureUntitledKey(tab);
+        const existing = this.untitledTimers.get(untitledKey);
+        if (existing) clearTimeout(existing);
+
+        const timer = setTimeout(() => {
+            this.createUntitledBackup(tab, content ?? tab.content).catch(error => {
+                console.error('[LocalHistory] Untitled backup error:', error);
+            });
+            this.untitledTimers.delete(untitledKey);
+        }, 12000);
+
+        this.untitledTimers.set(untitledKey, timer);
+    },
+
+    clearUntitledHistory(tabOrKey) {
+        const name = this.getUntitledStateName(tabOrKey);
+        if (!name) return { success: false, error: 'Missing key' };
+
+        try {
+            const untitledKey = typeof tabOrKey === 'string' ? tabOrKey : tabOrKey?.untitledHistoryKey;
+            if (untitledKey) {
+                const timer = this.untitledTimers.get(untitledKey);
+                if (timer) {
+                    clearTimeout(timer);
+                    this.untitledTimers.delete(untitledKey);
+                }
+                this.hashCache.delete(`untitled:${untitledKey}`);
+                const clears = (this.untitledClears ||= new Map());
+                clears.set(untitledKey, (clears.get(untitledKey) || 0) + 1);
+            }
+            const legacyKey = this.getLegacyUntitledStorageKey(tabOrKey);
+            if (legacyKey) localStorage.removeItem(legacyKey);
+            window.electronAPI?.stateDelete?.(name)?.catch?.(() => { });
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    },
+
+    renderHistoryModal({ titleText, entries, mode, filePath = '', untitledKey = '', tabId = '', emptyTitle, emptyHint }) {
+        const modal = document.getElementById('local-history-modal');
+        const overlay = document.getElementById('local-history-overlay');
+        const list = document.getElementById('local-history-list');
+        const title = document.getElementById('local-history-title');
+
+        if (!modal || !overlay || !list || !title) {
+            console.error('[LocalHistory] Modal elements not found');
+            return;
+        }
+
+        title.textContent = titleText;
+        modal.dataset.mode = mode;
+        modal.dataset.filePath = filePath || '';
+        modal.dataset.untitledKey = untitledKey || '';
+        modal.dataset.tabId = tabId || '';
+
+        if (entries.length === 0) {
+            list.innerHTML = `
+                <div class="history-empty">
+                    <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                    <p>${emptyTitle}</p>
+                    <span>${emptyHint}</span>
+                </div>
+            `;
+        } else {
+            list.innerHTML = entries.map((entry) => `
+                <div class="history-entry" data-backup-path="${entry.path || ''}" data-backup-id="${entry.id || ''}">
+                    <div class="history-entry-info">
+                        <span class="history-entry-time">${entry.formattedTime}</span>
+                        <span class="history-entry-size">${entry.size}</span>
+                    </div>
+                    <div class="history-entry-actions">
+                        <button class="btn-history-view" data-action="view" title="View content">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                        </button>
+                        <button class="btn-history-restore" data-action="restore" title="Restore this version">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                                <path d="M3 3v5h5"></path>
+                            </svg>
+                            Restore
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            list.querySelectorAll('.btn-history-view').forEach(btn => {
+                btn.onclick = (e) => this.handleViewClick(e);
+            });
+            list.querySelectorAll('.btn-history-restore').forEach(btn => {
+                btn.onclick = (e) => this.handleRestoreClick(e);
+            });
+        }
+
+        overlay.classList.add('active');
+        modal.classList.add('active');
+    },
+
+    /**
+     * Show the Local History modal for a file
+     * @param {string} filePath - Path to file
+     */
+    async showHistoryModal(filePath) {
+        if (!filePath) {
+            this.showNotification('No file selected', 'warning');
+            return;
+        }
+
+        const entries = await this.getHistory(filePath);
+        const fileName = filePath.split(/[\\/]/).pop();
+        this.renderHistoryModal({
+            titleText: `Checkpoints: ${fileName}`,
+            entries,
+            mode: 'file',
+            filePath,
+            emptyTitle: 'No history available for this file',
+            emptyHint: 'History is created when you save changes'
+        });
+    },
+
+    async showUntitledHistoryModal(tab) {
+        if (!tab) {
+            this.showNotification('No file selected', 'warning');
+            return;
+        }
+
+        const untitledKey = this.ensureUntitledKey(tab);
+        const entries = await this.getUntitledHistory(untitledKey);
+        this.renderHistoryModal({
+            titleText: `Untitled Checkpoints: ${tab.name || 'untitled.cpp'}`,
+            entries,
+            mode: 'untitled',
+            untitledKey,
+            tabId: tab.id,
+            emptyTitle: 'No checkpoints for this untitled tab',
+            emptyHint: 'A snapshot is saved automatically while you type'
+        });
+    },
+
+    /**
+     * Hide the Local History modal
+     */
+    hideHistoryModal() {
+        const modal = document.getElementById('local-history-modal');
+        const overlay = document.getElementById('local-history-overlay');
+
+        if (modal) modal.classList.remove('active');
+        if (overlay) overlay.classList.remove('active');
+    },
+
+    /**
+     * Handle view button click
+     */
+    async handleViewClick(e) {
+        const modal = document.getElementById('local-history-modal');
+        const mode = modal?.dataset.mode || 'file';
+        const entry = e.target.closest('.history-entry');
+        let content = null;
+
+        if (mode === 'untitled') {
+            const untitledKey = modal?.dataset.untitledKey;
+            const backupId = entry.dataset.backupId;
+            const history = await this.getUntitledHistory(untitledKey);
+            content = history.find(item => item.id === backupId)?.content ?? null;
+        } else {
+            const backupPath = entry.dataset.backupPath;
+            content = await this.getHistoryContent(backupPath);
+        }
+
+        if (content !== null) {
+            this.showContentPreview(content);
+        } else {
+            this.showNotification('Could not load backup content', 'error');
+        }
+    },
+
+    /**
+     * Handle restore button click
+     */
+    async handleRestoreClick(e) {
+        const modal = document.getElementById('local-history-modal');
+        const mode = modal?.dataset.mode || 'file';
+        const entry = e.target.closest('.history-entry');
+        let result;
+
+        if (mode === 'untitled') {
+            const untitledKey = modal.dataset.untitledKey;
+            const backupId = entry.dataset.backupId;
+            const history = await this.getUntitledHistory(untitledKey);
+            const restored = history.find(item => item.id === backupId);
+            if (!restored) {
+                this.showNotification('Could not find checkpoint content', 'error');
+                return;
+            }
+            result = { success: true, content: restored.content };
+        } else {
+            const filePath = modal.dataset.filePath;
+            const backupPath = entry.dataset.backupPath;
+            result = await this.restoreFromHistory(filePath, backupPath);
+        }
+
+        if (result.success) {
+            // Apply as one edit on the tab's model: undoable with Ctrl+Z, and the
+            // tab becomes modified so the user decides whether to save it.
+            if (typeof App !== 'undefined') {
+                // The checkpoint belongs to one file: restore into the tab of that
+                // file, not whichever tab the focused split pane happens to show.
+                const filePath = mode === 'file' ? modal?.dataset.filePath : '';
+                const keyOf = (p) => (typeof pathKey === 'function' ? pathKey(p) : String(p || '').replace(/\\/g, '/'));
+                const pathTab = filePath ? App.tabs.find(t => t.path && keyOf(t.path) === keyOf(filePath)) : null;
+                const activeTabId = modal?.dataset.tabId || (App.activeEditor === 2 && App.splitTabId ? App.splitTabId : App.activeTabId);
+                const targetTab = pathTab
+                    || (filePath ? null : (App.tabs.find(t => t.id === activeTabId) || App.tabs.find(t => t.id === App.activeTabId)));
+                if (targetTab) {
+                    const model = getTabModel(targetTab);
+                    model.pushStackElement();
+                    model.pushEditOperations([], [{ range: model.getFullModelRange(), text: result.content }], () => null);
+                    model.pushStackElement();
+                    targetTab.content = result.content;
+                    targetTab.modified = true;
+                    renderTabs();
+                } else {
+                    this.showNotification('Open the file in a tab to restore this checkpoint', 'warning');
+                    return;
+                }
+                this.showNotification('File restored successfully!', 'success');
+                this.hideHistoryModal();
+            }
+        } else {
+            this.showNotification('Restore failed: ' + result.error, 'error');
+        }
+    },
+
+    /**
+     * Show content preview using Monaco Editor (readonly)
+     */
+    showContentPreview(content) {
+        let previewModal = document.getElementById('history-preview-modal');
+
+        if (!previewModal) {
+            previewModal = document.createElement('div');
+            previewModal.id = 'history-preview-modal';
+            previewModal.className = 'history-preview-modal';
+            previewModal.innerHTML = `
+                <div class="history-preview-container">
+                    <div class="history-preview-header">
+                        <h3>Preview (Read-only)</h3>
+                        <button class="btn-close-preview">&times;</button>
+                    </div>
+                    <div id="history-preview-editor" style="flex:1;min-height:300px;"></div>
+                </div>
+            `;
+            document.body.appendChild(previewModal);
+
+            previewModal.querySelector('.btn-close-preview').onclick = () => {
+                previewModal.classList.remove('active');
+            };
+
+            // Click outside to close
+            previewModal.onclick = (e) => {
+                if (e.target === previewModal) {
+                    previewModal.classList.remove('active');
+                }
+            };
+        }
+
+        // Create or update Monaco Editor for preview
+        const editorContainer = document.getElementById('history-preview-editor');
+
+        // Check if Monaco is available
+        if (typeof monaco !== 'undefined') {
+            // One preview editor, reused. Its own model is replaced and the old one freed.
+            // No `theme` option: Monaco themes are global and the app's is already set.
+            if (previewModal._editor) {
+                const old = previewModal._editor.getModel();
+                previewModal._editor.setModel(monaco.editor.createModel(content, 'cpp'));
+                old?.dispose();
+                previewModal._editor.setScrollTop(0);
+                previewModal.classList.add('active');
+                return;
+            }
+            editorContainer.innerHTML = '';
+            const previewEditor = monaco.editor.create(editorContainer, {
+                model: monaco.editor.createModel(content, 'cpp'),
+                readOnly: true,
+                fontSize: App.settings?.editor?.fontSize || 14,
+                fontFamily: App.settings?.editor?.fontFamily || 'JetBrains Mono, Consolas, monospace',
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                lineNumbers: 'on',
+                folding: true,
+                wordWrap: 'off',
+                renderLineHighlight: 'none',
+                cursorStyle: 'line',
+                domReadOnly: true
+            });
+
+            previewModal._editor = previewEditor;
+        } else {
+            // Fallback to pre tag if Monaco not available - use theme colors
+            const bg = getComputedStyle(document.documentElement).getPropertyValue('--editor-bg').trim() || '#1a2530';
+            const fg = getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() || '#e0f0ff';
+            editorContainer.innerHTML = `<pre style="margin:0;padding:16px;overflow:auto;height:100%;background:${bg};color:${fg};font-family:'JetBrains Mono',Consolas,monospace;font-size:13px;white-space:pre-wrap;border-radius:12px;">${escHtml(content)}</pre>`;
+        }
+
+        previewModal.classList.add('active');
+    },
+
+    /**
+     * Escape HTML for fallback display
+     */
+
+    /**
+     * Show notification
+     */
+    showNotification(message, type = 'info') {
+        // Use existing notification system if available
+        if (typeof log === 'function') {
+            log(message, type === 'success' ? 'success' : type === 'error' ? 'error' : 'info');
+        } else {
+            console.log(`[LocalHistory] ${type}: ${message}`);
+        }
+    }
+};
+
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    LocalHistory.init();
+
+    // Close modal when clicking overlay
+    const overlay = document.getElementById('local-history-overlay');
+    if (overlay) {
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                LocalHistory.hideHistoryModal();
+            }
+        });
+    }
+
+    // Close button handler
+    const closeBtn = document.getElementById('local-history-close');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => LocalHistory.hideHistoryModal());
+    }
+
+    // Clear history button
+    const clearBtn = document.getElementById('local-history-clear');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', async () => {
+            const modal = document.getElementById('local-history-modal');
+            const mode = modal?.dataset.mode || 'file';
+            const filePath = modal?.dataset.filePath;
+            const untitledKey = modal?.dataset.untitledKey;
+
+            if (confirm('Are you sure you want to delete all history for this file?')) {
+                const result = mode === 'untitled'
+                    ? LocalHistory.clearUntitledHistory(untitledKey)
+                    : await LocalHistory.clearHistory(filePath);
+
+                if (result.success) {
+                    LocalHistory.showNotification('History cleared', 'success');
+                    if (mode === 'untitled') {
+                        const tabId = modal?.dataset.tabId;
+                        const tab = App?.tabs?.find(t => t.id === tabId);
+                        if (tab) {
+                            LocalHistory.showUntitledHistoryModal(tab);
+                        } else {
+                            LocalHistory.hideHistoryModal();
+                        }
+                    } else {
+                        LocalHistory.showHistoryModal(filePath);
+                    }
+                }
+            }
+        });
+    }
+});
+
+// Export for use in other modules
+window.LocalHistory = LocalHistory;

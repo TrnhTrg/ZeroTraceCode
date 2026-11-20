@@ -1,0 +1,1519 @@
+/**
+ * C++ IDE - Renderer Process
+ * 
+ * Main application logic for the C++ IDE including:
+ * - Monaco Editor integration with syntax highlighting
+ * - Tab management and split editor support
+ * - Build system integration (compile, run, stop)
+ * - Settings management and theme system
+ * - Terminal and I/O panel handling
+ * 
+ * @author Project IDE Team
+ * @license MIT
+ */
+
+// ============================================================================
+// DEFAULT SETTINGS
+// ============================================================================
+const DEFAULT_SETTINGS = {
+    editor: {
+        fontSize: 14,
+        fontFamily: "'JetBrains Mono', monospace",
+        tabSize: 4,
+        scrollBeyondLastLine: false,
+        vimMode: false,     // Vim keybindings (vim-mode.js); switches to the keybindingsVim profile
+        minimap: true,
+        wordWrap: false,
+        multiCursorModifier: 'ctrlCmd',
+        colorScheme: 'auto',
+        autoSave: true,
+        autoSaveDelay: 30,  // seconds
+        liveCheck: false,  // Real-time syntax checking
+        liveCheckDelay: 1000,  // milliseconds
+        snippets: true,  // Enable snippet suggestions
+        keywords: true,  // Enable keyword suggestions
+        intellisense: true,  // Clangd-backed completions + hover
+        formatStyle: 'google',  // AStyle preset (app/services/formatter/styles.js)
+        formatOnSave: false     // Format C/C++ files on Ctrl+S (not on auto-save)
+    },
+    languages: {},
+    compiler: {
+        cStandard: 'c17',
+        cppStandard: '',
+        optimization: '',
+        warnings: false,
+        useLLD: true,
+        singleFileMode: true,
+        fastDebugMode: true,
+        disableExceptions: false,
+        disableRTTI: false,
+        extraFlags: ''
+    },
+    execution: {
+        parallelTests: true,   // batch tests run on a small worker pool
+        timeLimitEnabled: false,
+        timeLimitSeconds: 3,
+        clearTerminal: true,
+        autoSendInput: true,
+        useExternalTerminal: false,
+        panelFontSize: 13,
+        noBuildCache: false,
+        realtimeOutput: true
+    },
+    appearance: {
+        language: 'en',
+        theme: 'monokai',
+        bgOpacity: 50,
+        bgUrl: '',
+        performanceMode: true,
+        animatedBackground: true,  // play a theme's background video (only while the window has focus)
+        cursorTrail: true,         // Neovide-style cursor trail (independent of performance mode)
+        uiScale: 'auto'   // 'auto' or a percentage; applied by the main process as the page zoom
+    },
+    startup: {
+        behavior: 'restore-previous-session'
+    },
+    terminal: {
+        colorScheme: 'ansi-16'
+    },
+    panels: {
+        showIO: false,
+        showTerm: true,
+        showProblems: false,
+        terminalDocked: true,
+        ioWidth: null,
+        termWidth: null,
+        problemsHeight: null
+    },
+    oj: {
+        verified: false,
+        importTarget: 'new-tab',   // 'new-tab' | 'current-tab'
+        importMerge: 'replace'     // 'replace' | 'append' (only used when importTarget = 'current-tab')
+    },
+    localHistory: {
+        enabled: true,
+        maxVersions: 20,
+        maxAgeDays: 7,
+        maxFileSizeKB: 1024
+    },
+    template: {
+        code: `#include<bits/stdc++.h>
+using namespace std;
+
+int main() {
+    cout << "hello gaialime";
+    return 0;
+}`,
+        cCode: `#include <stdio.h>
+
+int main() {
+
+    return 0;
+}
+`
+    },
+    keybindings: {
+        compile: 'F9',
+        buildRun: 'F11',
+        run: 'F10',
+        stop: 'Shift+F5',
+        debugStart: 'F5',
+        debugStepOut: 'Shift+F11',
+        save: 'Ctrl+S',
+        saveAs: 'Ctrl+Shift+S',
+        newFile: 'Ctrl+N',
+        openFile: 'Ctrl+O',
+        openFolder: 'Ctrl+Shift+O',
+        newTab: 'Ctrl+T',
+        closeTab: 'Ctrl+W',
+        nextTab: 'Ctrl+Tab',
+        prevTab: 'Ctrl+Shift+Tab',
+        toggleProblems: 'Ctrl+J',
+        settings: 'Ctrl+,',
+        toggleSplit: 'Ctrl+\\',
+        formatCode: 'Ctrl+Shift+A',
+        markdownPreview: 'Ctrl+Shift+V',
+        toggleExplorer: 'Ctrl+E',
+        commentLine: 'Ctrl+/',
+        selectNextOccurrence: 'Ctrl+D',
+        selectAllOccurrences: 'Ctrl+Shift+L',
+        moveLineUp: 'Alt+Up',
+        moveLineDown: 'Alt+Down',
+        copyLineUp: 'Shift+Alt+Up',
+        copyLineDown: 'Shift+Alt+Down',
+        uiZoomIn: 'Ctrl+=',
+        uiZoomOut: 'Ctrl+-',
+        uiZoomReset: 'Ctrl+0'
+    },
+    snippets: [
+        { trigger: 'hello', name: 'Hello World', content: '#include <iostream>\nusing namespace std;\n\nint main() {\n\tcout << "Hello World!";\n\treturn 0;\n}', isBuiltin: true },
+    ],
+    discord: {
+        enabled: true
+    },
+    updates: {
+        prerelease: false
+    }
+};
+
+// The keybinding profile used while Vim Mode is on: the app's Ctrl shortcuts that Vim needs
+// itself (Ctrl+D half page, Ctrl+O jump back, Ctrl+W window, Ctrl+E scroll, Ctrl+T, Ctrl+J)
+// move to Ctrl+Shift so Vim receives them (Open File to Ctrl+Alt+O: Ctrl+Shift+O is Monaco's
+// Go to Symbol). Edited separately in Settings › Keybindings.
+DEFAULT_SETTINGS.keybindingsVim = {
+    ...DEFAULT_SETTINGS.keybindings,
+    openFile: 'Ctrl+Alt+O',
+    newTab: 'Ctrl+Shift+T',
+    closeTab: 'Ctrl+Shift+W',
+    toggleProblems: 'Ctrl+Shift+J',
+    toggleExplorer: 'Ctrl+Shift+E',
+    selectNextOccurrence: 'Ctrl+Shift+D'
+};
+
+// ============================================================================
+// APPLICATION STATE
+// ============================================================================
+const App = {
+    editor: null,
+    editor2: null,
+    activeEditor: 1,
+    isSplit: false,
+    tabs: [],
+    activeTabId: null,
+    splitTabId: null,
+    exePath: null,
+    isRunning: false,
+    ready: false,
+    showIO: false,
+    showTerm: true,
+    showProblems: false,
+    problems: [],
+    tabDiagnostics: {},
+    settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
+    errorDecorations: [],
+    problemsTabId: null,        // tab that App.problems were reported for
+    runTimeout: null,
+    runSeq: 0,                  // bumped by every run(); late timers check it
+    autoInputTimer: null,       // the Input box being sent to a run that just started
+    ioByTab: {},
+    isSettingValue: false
+};
+
+function createUntitledHistoryKey() {
+    return 'untitled_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+}
+
+function getPreferredTabId() {
+    return App.activeEditor === 2 && App.splitTabId ? App.splitTabId : App.activeTabId;
+}
+
+function summarizeDiagnostics(diagnostics = []) {
+    return diagnostics.reduce((summary, item) => {
+        const severity = String(item?.severity || item?.type || 'info').toLowerCase();
+        if (severity === 'error') summary.errors += 1;
+        else if (severity === 'warning') summary.warnings += 1;
+        else summary.info += 1;
+        return summary;
+    }, { errors: 0, warnings: 0, info: 0 });
+}
+
+function setTabDiagnostics(tabId, diagnostics = []) {
+    if (!tabId) return;
+    const summary = summarizeDiagnostics(diagnostics);
+    if ((summary.errors + summary.warnings + summary.info) === 0) {
+        delete App.tabDiagnostics[tabId];
+    } else {
+        App.tabDiagnostics[tabId] = summary;
+    }
+    renderTabs();
+}
+
+function setActiveTabDiagnostics(diagnostics = []) {
+    setTabDiagnostics(getPreferredTabId(), diagnostics);
+}
+
+if (typeof window !== 'undefined') {
+    window.App = App;
+
+    Object.defineProperties(App, {
+        currentFilePath: {
+            get() {
+                const activeId = App.activeEditor === 2 && App.splitTabId ? App.splitTabId : App.activeTabId;
+                return App.tabs.find(t => t.id === activeId)?.path || null;
+            }
+        },
+        renderTabs: {
+            value: () => renderTabs()
+        },
+        updateTitle: {
+            value: () => {}
+        }
+    });
+}
+
+const DEFAULT_CODE = `#include<bits/stdc++.h>
+#define ll long long
+using namespace std;
+int main() {
+    cout << "toi yeu gaialimi";
+    return 0;
+}
+`;
+
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
+document.addEventListener('DOMContentLoaded', () => {
+    loadSettings();
+    applySettings();
+    // Monaco is the heaviest part of startup (~0.6s of load + editor create).
+    // Don't block first paint on it. It loads on demand the moment a file is
+    // opened/created (ensureMonaco() inside setActive), with an idle-time
+    // fallback so Monaco-embedding panels (settings template, snippets, theme
+    // customizer, checkpoint preview) still work even if no file is opened.
+    if (typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(() => ensureMonaco().catch(() => { }), { timeout: 1500 });
+    } else {
+        setTimeout(() => ensureMonaco().catch(() => { }), 800);
+    }
+    initHeader();
+    initMenus();
+    initPanels();
+    initResizers();
+    initShortcuts();
+    initTabsScroll();
+    initSettings();
+    initTabDrag();
+    initFileDrop();
+    initCompetitiveCompanion();
+    detectPortableVersion();
+    validateCompilerOnStartup();
+    updateUI();
+    updateProblemSummaryUI();
+    setLiveCheckUIState(App.settings.editor.liveCheck ? 'idle' : 'disabled');
+    setStatus('Ready', 'ready');
+    // The explorer reads its saved state over IPC; restore the session after it,
+    // so reopened files can bring the explorer back as it was.
+    const explorerReady = typeof FileExplorer !== 'undefined' ? FileExplorer.init() : null;
+    Promise.resolve(explorerReady).catch((e) => console.error('[FileExplorer] init failed:', e)).then(initSessionPersistence);
+
+    let resizeRequestId = null;
+    window.addEventListener('resize', () => {
+        if (resizeRequestId) return;
+        resizeRequestId = requestAnimationFrame(() => {
+            if (App.editor) App.editor.layout();
+            if (App.editor2) App.editor2.layout();
+            resizeRequestId = null;
+        });
+    });
+
+    // Staggered Entrance Animation
+    const header = document.querySelector('.header-bar');
+    const main = document.querySelector('.main');
+
+    // Prepare for animation
+    if (header) {
+        header.style.opacity = '0';
+        header.classList.add('animate-slide-up');
+        // Reset after animation to avoid conflicts
+        header.addEventListener('animationend', () => {
+            header.style.opacity = '';
+            header.classList.remove('animate-slide-up');
+        }, { once: true });
+    }
+
+    if (main) {
+        main.style.opacity = '0';
+        // Small delay for main content
+        setTimeout(() => {
+            main.classList.add('animate-slide-up');
+            main.addEventListener('animationend', () => {
+                main.style.opacity = '';
+                main.classList.remove('animate-slide-up');
+            }, { once: true });
+        }, 100);
+    }
+});
+
+let __monacoLoadPromise = null;
+
+// Load Monaco (the editor engine) on demand. Idempotent: repeated calls return
+// the same promise, which resolves once the editor exists and App.ready is true.
+function ensureMonaco() {
+    if (!__monacoLoadPromise) {
+        // A bundle that failed to load is tried again by the next call.
+        __monacoLoadPromise = new Promise((resolve, reject) => initMonaco(resolve, reject))
+            .catch((err) => { __monacoLoadPromise = null; throw err; });
+    }
+    return __monacoLoadPromise;
+}
+
+// ============================================================================
+// TAB MODELS
+// ============================================================================
+// Every tab owns its own Monaco text model. Showing a tab attaches its model
+// to the editor (setModel) instead of overwriting one shared model's text
+// (setValue), which is what used to wipe the undo history on every tab switch.
+// Markers and decorations now belong to the file they were made for, and the
+// same tab shown in both split panes is one live document.
+
+// The file's extension picks its language. C/C++ (and untitled tabs) get IntelliSense, live
+// check, Build and Format; write-ups open as Markdown and test data (.inp .out .txt ...) as plain
+// text. JSON stays plain text: Monaco's JSON mode needs a web worker this page does not set up.
+const CPP_EXTENSIONS = new Set(['cpp', 'cc', 'cxx', 'c', 'h', 'hpp', 'hh', 'hxx', 'ipp', 'tpp', 'inl']);
+
+/**
+ * Plain text and test data: a line starting with "# " (or a lone "#") or "//" is a comment,
+ * a line that is only "[...]" is a section header. "#" glued to more text ("#..#", "##.")
+ * stays data, so grids and other test input are not mistaken for comments.
+ */
+let textLanguageRegistered = false;
+
+function registerTextLanguage() {
+    if (textLanguageRegistered || typeof monaco === 'undefined') return;
+    textLanguageRegistered = true;
+    monaco.languages.register({ id: 'sameko-text', aliases: ['Plain Text'] });
+    monaco.languages.setMonarchTokensProvider('sameko-text', {
+        tokenizer: {
+            root: [
+                [/^\s*(?:#(?:\s.*)?|\/\/.*)$/, 'comment'],
+                [/^\s*\[[^\]]+\]\s*$/, 'keyword']
+            ]
+        }
+    });
+}
+
+function fileExtension(name) {
+    const base = String(name || '').split(/[/\x5c]/).pop();
+    const dot = base.lastIndexOf('.');
+    return dot > 0 ? base.slice(dot + 1).toLowerCase() : '';
+}
+
+/** Monaco language id for a file name or path. */
+function languageForFile(name) {
+    const ext = fileExtension(name);
+    if (!ext || CPP_EXTENSIONS.has(ext)) return 'cpp';
+    if (ext === 'py') return 'python';
+    if (ext === 'java') return 'java';
+    if (ext === 'cs') return 'csharp';
+    if (ext === 'md' || ext === 'markdown') return 'markdown';
+    return 'sameko-text';
+}
+
+/** Whether C++ tooling (build, live check, format) applies to the tab. */
+function isCppTab(tab) {
+    return !tab || languageForFile(tab.path || tab.name) === 'cpp';
+}
+
+function isRunnableTab(tab) {
+    return !!tab && ['cpp', 'python', 'java', 'csharp'].includes(languageForFile(tab.path || tab.name));
+}
+
+/** After a rename or Save As the extension may have changed. */
+function syncTabLanguage(tab) {
+    if (!tab?.model || tab.model.isDisposed()) return;
+    registerTextLanguage();
+    const language = languageForFile(tab.path || tab.name);
+    if (tab.model.getLanguageId() !== language) {
+        tab.exePath = null;
+        monaco.editor.setModelLanguage(tab.model, language);
+        // C++ diagnostics do not apply to a write-up or to test data.
+        if (language !== 'cpp') monaco.editor.setModelMarkers(tab.model, 'live-check', []);
+    }
+    for (const editor of [App.editor, App.editor2]) {
+        if (editor?.getModel() === tab.model) applyFileTypeOptions(editor);
+    }
+}
+
+/**
+ * Options that follow the file shown: write-ups (.md, .txt) wrap long lines, and text files do
+ * not flag Vietnamese and other non-ASCII letters as "ambiguous" or "invisible" characters.
+ */
+function applyFileTypeOptions(editor) {
+    if (!editor) return;
+    const tab = getTabForModel(editor.getModel());
+    const language = tab ? languageForFile(tab.path || tab.name) : 'cpp';
+    const prose = language === 'markdown' || fileExtension(tab?.path || tab?.name) === 'txt';
+    const text = language !== 'cpp';
+    editor.updateOptions({
+        wordWrap: prose || App.settings.editor.wordWrap ? 'on' : 'off',
+        unicodeHighlight: { ambiguousCharacters: !text, invisibleCharacters: !text }
+    });
+    if (typeof updateLanguageStatus === 'function') updateLanguageStatus();
+}
+
+/** The tab's model, created on first use. Requires Monaco to be loaded. */
+function getTabModel(tab) {
+    if (!tab.model || tab.model.isDisposed()) {
+        registerTextLanguage();
+        tab.model = monaco.editor.createModel(tab.content || '', languageForFile(tab.path || tab.name));
+        bindTabContent(tab);
+    }
+    return tab.model;
+}
+
+/**
+ * While a tab has a live model, tab.content is the model's text, built only
+ * when something reads it. It used to be a copy refreshed on every keystroke
+ * (the whole document, twice when both panes showed the file). Writes keep a
+ * fallback copy that is used once the model is gone.
+ */
+function bindTabContent(tab) {
+    const desc = Object.getOwnPropertyDescriptor(tab, 'content');
+    if (desc && desc.get) return;
+    let stored = tab.content;
+    Object.defineProperty(tab, 'content', {
+        configurable: true,
+        enumerable: true,
+        get() { return tab.model && !tab.model.isDisposed() ? tab.model.getValue() : stored; },
+        set(value) { stored = value; }
+    });
+}
+
+/** The tab a model belongs to (null for the placeholder/empty model). */
+function getTabForModel(model) {
+    if (!model) return null;
+    return App.tabs.find(t => t.model === model) || null;
+}
+
+/** Attach a tab's model to an editor. */
+function showTabInEditor(editor, tab) {
+    if (!editor || !tab) return;
+    const model = getTabModel(tab);
+    if (editor.getModel() !== model) editor.setModel(model);
+    applyFileTypeOptions(editor);
+}
+
+/** Detach whatever is shown, leaving the editor on its empty placeholder model. */
+function showEmptyModel(editor) {
+    if (!editor) return;
+    if (!editor.__emptyModel || editor.__emptyModel.isDisposed()) {
+        editor.__emptyModel = monaco.editor.createModel('', 'cpp');
+    }
+    if (editor.getModel() !== editor.__emptyModel) editor.setModel(editor.__emptyModel);
+}
+
+/**
+ * Replace a tab's whole text from outside the editor (reload from disk,
+ * imported template…). Goes through the model when there is one so every
+ * editor showing the tab updates; never marks the file as "edited".
+ */
+function setTabText(tab, text) {
+    tab.content = text;
+    if (tab.model && !tab.model.isDisposed()) {
+        App.isSettingValue = true;
+        try { tab.model.setValue(text); } finally { App.isSettingValue = false; }
+    }
+}
+
+/** Free a closed tab's model, detaching it from any editor first. */
+function disposeTabModel(tab) {
+    const model = tab.model;
+    if (!model) return;
+    if (!model.isDisposed()) tab.content = model.getValue(); // keep the last text
+    tab.model = null;
+    if (App.editor && App.editor.getModel() === model) showEmptyModel(App.editor);
+    if (App.editor2 && App.editor2.getModel() === model) showEmptyModel(App.editor2);
+    if (!model.isDisposed()) model.dispose();
+}
+
+/** Editor-owned decorations live on a model: clear ours before another model is attached. */
+function clearEditorDecorationsBeforeSwitch() {
+    if (window.Debugger && typeof window.Debugger.onFileHidden === 'function') {
+        try { window.Debugger.onFileHidden(); } catch (_) { }
+    }
+}
+
+// Push the active tab's content into the editor once Monaco is ready. Covers the
+// case where tabs were opened/restored before the (deferred) editor finished
+// loading — replacing the old fragile "wait 300ms and hope Monaco is ready"
+// assumption in initSessionPersistence with an explicit, timing-independent sync.
+function syncEditorToActiveTab() {
+    if (!App.editor || !App.ready || !App.activeTabId) return;
+    const tab = App.tabs.find(t => t.id === App.activeTabId);
+    if (!tab) return;
+    showTabInEditor(App.editor, tab);
+    if (tab.viewState) {
+        App.editor.restoreViewState(tab.viewState);
+    } else {
+        App.editor.setPosition({ lineNumber: 1, column: 1 });
+    }
+}
+
+function initMonaco(onReady, onLoadError) {
+    // The Monaco bundle (scripts/build/build-monaco.js) sets window.monaco when it runs.
+    loadScript('vendor/monaco/editor.js', { module: true }).then(async function () {
+
+        // Register enhanced C++ tokenizer with escape sequence highlighting
+        monaco.languages.setMonarchTokensProvider('cpp', {
+            defaultToken: '',
+            tokenPostfix: '.cpp',
+            keywords: [
+                'abstract', 'alignas', 'alignof', 'and', 'and_eq', 'asm',
+                'bitand', 'bitor', 'break', 'case', 'catch', 'class',
+                'co_await', 'co_return',
+                'co_yield', 'compl', 'concept', 'const', 'const_cast', 'consteval',
+                'constexpr', 'constinit', 'continue', 'decltype', 'default', 'delete',
+                'do', 'dynamic_cast', 'else', 'enum', 'explicit', 'export',
+                'extern', 'false', 'final', 'for', 'friend', 'goto', 'if',
+                'import', 'inline', 'module', 'mutable', 'namespace',
+                'new', 'noexcept', 'not', 'not_eq', 'nullptr', 'operator', 'or',
+                'or_eq', 'override', 'private', 'protected', 'public', 'register',
+                'reinterpret_cast', 'requires', 'return', 'signed', 'sizeof',
+                'static', 'static_assert', 'static_cast', 'struct', 'switch',
+                'template', 'this', 'thread_local', 'throw', 'true', 'try', 'typedef',
+                'typeid', 'typename', 'union', 'unsigned', 'using', 'virtual',
+                'volatile', 'while', 'xor', 'xor_eq'
+            ],
+            typeKeywords: [
+                'auto', 'bool', 'char', 'char8_t', 'char16_t', 'char32_t',
+                'double', 'float', 'int', 'long', 'short',
+                'void', 'wchar_t',
+                'size_t', 'ptrdiff_t', 'int8_t', 'int16_t', 'int32_t', 'int64_t',
+                'uint8_t', 'uint16_t', 'uint32_t', 'uint64_t',
+                '__int128', '__int128_t', '__uint128_t'
+            ],
+            builtins: [
+                'cout', 'cin', 'endl', 'cerr', 'clog',
+                'printf', 'scanf', 'puts', 'getchar', 'putchar',
+                'malloc', 'calloc', 'realloc', 'free',
+                'memset', 'memcpy', 'memmove', 'memcmp',
+                'strlen', 'strcmp', 'strcpy', 'strcat',
+                'sort', 'reverse', 'swap', 'min', 'max',
+                'abs', 'pow', 'sqrt', 'log', 'ceil', 'floor',
+                'gcd', 'lcm', 'lower_bound', 'upper_bound',
+                'next_permutation', 'prev_permutation',
+                'accumulate', 'count', 'find', 'fill',
+                'push_back', 'pop_back', 'push_front', 'pop_front',
+                'begin', 'end', 'size', 'empty', 'clear',
+                'insert', 'erase', 'front', 'back',
+                'first', 'second', 'make_pair', 'make_tuple',
+                'stoi', 'stol', 'stoll', 'stof', 'stod',
+                'to_string', 'getline', 'substr'
+            ],
+            // A '/' that starts a comment is not an operator (`i++// note`).
+            symbols: /(?:[=><!~?:&|+\-*\^%]|\/(?![\/*]))+/,
+            escapes: /\\(?:[abfnrtv\\"'0?]|x[0-9A-Fa-f]{1,4}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|[0-7]{1,3})/,
+            tokenizer: {
+                root: [
+                    // Preprocessor: #include <header> with highlighted path
+                    [/(^\s*#\s*include\s*)(<)([^>]*)(>)/, ['keyword', 'keyword', 'string.include', 'keyword']],
+                    // Preprocessor: #include "header" (string part handled by string rules below)
+                    [/^\s*#\s*include/, 'keyword'],
+                    // Preprocessor directives
+                    [/^\s*#\s*\w+/, 'keyword'],
+                    // Raw strings R"(...)" / R"x(...)x" (may span lines), and encoding prefixes
+                    [/(?:u8|[uUL])?R"([^()\\\s"]{0,16})\(/, { token: 'string', next: '@raw.$1' }],
+                    [/(?:u8|[uUL])(?=["'])/, 'string'],
+                    // Identifiers and keywords
+                    [/[a-zA-Z_]\w*(?=\s*\()/, {
+                        cases: {
+                            '@keywords': 'keyword',
+                            '@typeKeywords': 'type',
+                            '@builtins': 'function',
+                            '@default': 'function'
+                        }
+                    }],
+                    [/[a-zA-Z_]\w*/, {
+                        cases: {
+                            '@keywords': 'keyword',
+                            '@typeKeywords': 'type',
+                            '@builtins': 'variable.predefined',
+                            '@default': 'identifier'
+                        }
+                    }],
+                    // Whitespace
+                    { include: '@whitespace' },
+                    // Delimiters and operators
+                    [/[{}()\[\]]/, '@brackets'],
+                    [/[<>](?!@symbols)/, '@brackets'],
+                    // One operator at a time, longest first: a greedy run of symbols left
+                    // `x=-1` and `a==-b` uncolored.
+                    [/<=>|<<=|>>=|\.\.\.|->|::|&&|\|\||\+\+|--|[<>=!]=|[+\-*\/%&|^]=|<<|>>|[=<>!~?:&|+\-*\/^%]/, 'operator'],
+                    // Numbers
+                    // Floats: 1.5, .5, 1., 1e5, 2.5e-3f; ' is a C++14 digit separator (1'000'000)
+                    [/(?:\d(?:'?\d)*\.(?:\d(?:'?\d)*)?|\.\d(?:'?\d)*)(?:[eE][\-+]?\d+)?[fFlL]?/, 'number.float'],
+                    [/\d(?:'?\d)*[eE][\-+]?\d+[fFlL]?/, 'number.float'],
+                    [/0[xX][0-9a-fA-F](?:'?[0-9a-fA-F])*[uUlLzZ]*/, 'number.hex'],
+                    [/0[bB][01](?:'?[01])*[uUlLzZ]*/, 'number.binary'],
+                    [/0[0-7](?:'?[0-7])*[uUlLzZ]*/, 'number.octal'],
+                    [/\d(?:'?\d)*[uUlLzZ]*/, 'number'],
+                    // Delimiter
+                    [/[;,.]/, 'delimiter'],
+                    // Strings with escape sequences
+                    [/"([^"\\]|\\.)*$/, 'string.invalid'], // non-terminated string
+                    [/"/, 'string', '@string_double'],
+                    // Characters with escape sequences; an unclosed one ends with its line
+                    [/'([^'\\]|\\.)*$/, 'string.invalid'],
+                    [/'[^\\']'/, 'string'],
+                    [/'/, 'string', '@string_single'],
+                ],
+                whitespace: [
+                    [/[ \t\r\n]+/, ''],
+                    [/\/\*/, 'comment', '@comment'],
+                    [/\/\/.*$/, 'comment'],
+                ],
+                comment: [
+                    [/[^\/*]+/, 'comment'],
+                    [/\*\//, 'comment', '@pop'],
+                    [/[\/*]/, 'comment']
+                ],
+                string_double: [
+                    [/@escapes/, 'string.escape'],
+                    [/\\./, 'string.escape.invalid'],
+                    [/[^\\"]+/, 'string'],
+                    [/"/, 'string', '@pop']
+                ],
+                string_single: [
+                    [/@escapes/, 'string.escape'],
+                    [/\\./, 'string.escape.invalid'],
+                    [/[^\\']+/, 'string'],
+                    [/'/, 'string', '@pop']
+                ],
+                // Ends only at `)delim"` with the delimiter it was opened with ($S2).
+                raw: [
+                    [/\)([^()\\\s"]{0,16})"/, { cases: { '$1==$S2': { token: 'string', next: '@pop' }, '@default': 'string' } }],
+                    [/[^)]+/, 'string'],
+                    [/\)/, 'string']
+                ]
+            }
+        });
+
+        // Initialize ThemeManager (async for JSON loading)
+        if (typeof ThemeManager !== 'undefined') {
+            try {
+                await ThemeManager.init();
+            } catch (e) {
+                console.error('[ThemeManager] Init failed:', e);
+            }
+        }
+
+        // Move background images an older version stored inline in
+        // localStorage out to files (frees the storage quota).
+        if (typeof ThemeManager !== 'undefined' && ThemeManager.migrateStoredAssets) {
+            ThemeManager.migrateStoredAssets().catch(() => { });
+        }
+
+        // Initialize ThemeMarketplace
+        if (typeof ThemeMarketplace !== 'undefined') {
+            try {
+                await ThemeMarketplace.init();
+            } catch (e) {
+                console.error('[ThemeMarketplace] Init failed:', e);
+            }
+        }
+
+        App.editor = createEditor('editor-container');
+        App.ready = true;
+
+        // Bring up the debugger UI now that Monaco + the main editor exist.
+        if (window.Debugger) { try { window.Debugger.init(); } catch (e) { console.error('[Debugger] init failed:', e); } }
+
+        // If a tab was already active before Monaco finished loading (session
+        // restore, or the user opened a file during the deferred load), show it.
+        syncEditorToActiveTab();
+
+        // Phase 08 §2.1 — additively fold legacy Settings "Background URL"
+        // (perTheme[id].bgUrl) into the canonical `theme-bg-<id>` store before the
+        // first theme apply. Copy-only: never deletes, so both UIs keep working.
+        if (typeof ThemeManager !== 'undefined'
+            && typeof ThemeManager._migratePerThemeBackgrounds === 'function') {
+            try { await ThemeManager._migratePerThemeBackgrounds(); }
+            catch (e) { console.warn('[ThemeManager] bg migration failed:', e); }
+        }
+
+        // Apply saved theme
+        if (typeof applyTheme === 'function') {
+            applyTheme(App.settings.appearance.theme);
+        } else if (typeof ThemeManager !== 'undefined') {
+            try {
+                ThemeManager.setTheme(App.settings.appearance.theme);
+            } catch (e) {
+                console.error('[ThemeManager] setTheme failed:', e);
+            }
+        }
+
+
+        document.getElementById('editor-container').addEventListener('mousedown', () => {
+            // Rebuilding every tab on each click in the editor was pure waste;
+            // the tab strip only changes when focus moves between panes.
+            if (App.activeEditor === 1) return;
+            focusEditorPane(1);
+        });
+
+
+        initCtrlWheelZoom();
+
+
+        if (typeof registerCppIntellisense === 'function') {
+            registerCppIntellisense(monaco);
+            if (window.LanguageSupport) LanguageSupport.register(monaco);
+        }
+
+        if (typeof onReady === 'function') onReady();
+    }, (err) => {
+        console.error('[Monaco] failed to load the editor:', err);
+        if (typeof onLoadError === 'function') onLoadError(err);
+    }).catch((err) => console.error('[Monaco] editor setup failed:', err));
+}
+
+function initCtrlWheelZoom() {
+
+    window.addEventListener('wheel', e => {
+        if (!e.ctrlKey) return;
+
+        const editorContainer = e.target.closest('#editor-container, #editor-container-2');
+        const panelContainer = e.target.closest('.terminal-body, .terminal-input, .panel-textarea, .docked-io-textarea, .diff-display, #expected-diff, .io-section, .terminal-section, .docked-io-view');
+
+        if (!editorContainer && !panelContainer) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const delta = e.deltaY > 0 ? -1 : 1;
+
+        if (editorContainer) {
+            // Zoom editor font size
+            const currentSize = App.settings.editor.fontSize;
+            const newSize = Math.min(40, Math.max(8, currentSize + delta));
+            if (newSize !== currentSize) {
+                App.settings.editor.fontSize = newSize;
+                if (App.editor) App.editor.updateOptions({ fontSize: newSize });
+                if (App.editor2) App.editor2.updateOptions({ fontSize: newSize });
+                saveSettingsSoon();
+            }
+        } else if (panelContainer) {
+            // Zoom panel font size (terminal, I/O panels)
+            const currentSize = App.settings.execution.panelFontSize || 13;
+            const newSize = Math.min(30, Math.max(8, currentSize + delta));
+            if (newSize !== currentSize) {
+                App.settings.execution.panelFontSize = newSize;
+                document.documentElement.style.setProperty('--panel-font-size', newSize + 'px');
+                if (window.TerminalManager) TerminalManager.setFontSize(newSize);
+                // Update settings slider if visible
+                const slider = document.getElementById('set-panelFontSize');
+                const valSpan = document.getElementById('val-panelFontSize');
+                if (slider) slider.value = newSize;
+                if (valSpan) valSpan.textContent = newSize + 'px';
+                saveSettingsSoon();
+            }
+        }
+    }, { passive: false, capture: true });
+}
+
+// ============================================================================
+// MONACO EDITOR THEMES
+// ============================================================================
+
+
+// Windows and macOS file systems ignore case (a.cpp and A.cpp are one file); Linux does not.
+const PATHS_IGNORE_CASE = !/linux/i.test(navigator.platform || '');
+
+/** A path in the form used to compare two paths: forward slashes, case folded where the OS ignores case. */
+function pathKey(p) {
+    const s = String(p || '').replace(/\\/g, '/');
+    return PATHS_IGNORE_CASE ? s.toLowerCase() : s;
+}
+
+function resolveMultiCursorModifier() {
+    const configured = App.settings?.editor?.multiCursorModifier;
+    if (configured === 'alt' || configured === 'ctrlCmd') return configured;
+    return navigator.platform?.toLowerCase().includes('mac') ? 'alt' : 'ctrlCmd';
+}
+
+/**
+ * Monaco's `suggest.showX` flags filter by item KIND, and any kind not listed
+ * here defaults to *shown*. The old list covered a dozen kinds but not the ones
+ * clangd hands back most often — Field, Struct, Enum, EnumMember, Constructor,
+ * Constant, Interface — so turning "Intellisense (Code Suggestions)" off still
+ * left a popup full of clangd results. Enumerate every kind Monaco knows about
+ * so the switch covers the whole widget.
+ *
+ * These flags are only the display filter; the provider in
+ * `features/suggestions/cpp-suggestions.js` also has to stop asking clangd, or
+ * we would pay for an LSP round-trip per keystroke just to throw it away.
+ * @returns {object}
+ */
+function buildSuggestOptions() {
+    const smart = App.settings.editor.intellisense !== false;
+    // "Keyword Suggestions" narrows the identifier-ish kinds further.
+    const keywords = smart && App.settings.editor.keywords !== false;
+    const snippets = App.settings.editor.snippets !== false;
+
+    return {
+        showKeywords: keywords,
+        showClasses: keywords,
+        showFunctions: keywords,
+        showSnippets: snippets,
+        showWords: smart,
+        showVariables: smart,
+        showValues: smart,
+        showMethods: smart,
+        showProperties: smart,
+        showModules: smart,
+        showOperators: smart,
+        showTypeParameters: smart,
+        showFields: smart,
+        showStructs: smart,
+        showEnums: smart,
+        showEnumMembers: smart,
+        showConstants: smart,
+        showConstructors: smart,
+        showInterfaces: smart,
+        showEvents: smart,
+        showUnits: smart,
+        showColors: smart,
+        showUsers: smart,
+        showIssues: smart,
+        showDeprecated: smart,
+        showFiles: smart,          // the header list inside `#include <`
+        showIcons: true,
+        showReferences: false,
+        showFolders: false,
+        showStatusBar: false,
+        preview: true,
+        insertMode: 'insert'
+    };
+}
+
+/**
+ * Quick suggestions are what makes the widget appear while typing, so they stay
+ * on as long as *either* source of suggestions is enabled.
+ * @returns {object}
+ */
+function buildQuickSuggestions() {
+    const on = App.settings.editor.intellisense !== false
+        || App.settings.editor.snippets !== false;
+    return { other: on, comments: false, strings: on };
+}
+
+function createEditor(containerId) {
+    const editor = monaco.editor.create(document.getElementById(containerId), {
+        value: '',
+        language: 'cpp',
+        theme: App.settings.appearance.theme || 'kawaii-dark',
+        fontSize: App.settings.editor.fontSize,
+        fontFamily: App.settings.editor.fontFamily,
+        fontLigatures: true,
+        wordWrap: App.settings.editor.wordWrap ? 'on' : 'off',
+        multiCursorModifier: resolveMultiCursorModifier(),
+        scrollBeyondLastLine: !!App.settings.editor.scrollBeyondLastLine,
+        automaticLayout: true,
+        // Suggestions and hover popups can extend beyond the rounded editor card.
+        fixedOverflowWidgets: true,
+        tabSize: App.settings.editor.tabSize,
+        insertSpaces: true,
+        detectIndentation: false,
+        emptySelectionClipboard: false,
+        cursorBlinking: App.settings.appearance.performanceMode ? 'solid' : 'smooth',
+        smoothScrolling: false,
+        bracketPairColorization: { enabled: !App.settings.appearance.performanceMode },
+        // Monaco defaults this to false, which silently collapses the glyph margin
+        // to 0px — every `glyphMarginClassName` decoration (debugger breakpoint
+        // dots, the paused-line arrow, compiler error glyphs) was being drawn into
+        // a strip with no width. Breakpoints only ever showed as a tinted line.
+        glyphMargin: true,
+        padding: { top: 12 },
+        // Editor zoom is handled solely by initCtrlWheelZoom + fontSize. Monaco's
+        // built-in mouseWheelZoom applies a separate global zoom that re-applies on
+        // relayout (e.g. dragging a panel divider), shrinking only the editor. (#36)
+        mouseWheelZoom: false,
+
+        overviewRulerBorder: false,
+        overviewRulerLanes: 0,
+        hideCursorInOverviewRuler: true,
+        scrollbar: {
+
+            vertical: 'auto',
+            horizontal: 'auto',
+            verticalScrollbarSize: 14,
+            horizontalScrollbarSize: 14,
+            arrowSize: 0,
+            useShadows: false,
+
+            verticalSliderSize: 14,
+            horizontalSliderSize: 14
+        },
+
+        minimap: {
+            enabled: App.settings.editor.minimap && !App.settings.appearance.performanceMode,
+            showSlider: 'always',
+            renderCharacters: !App.settings.appearance.performanceMode,
+            scale: 1
+        },
+
+        quickSuggestions: buildQuickSuggestions(),
+        suggestOnTriggerCharacters: App.settings.editor.intellisense !== false,
+        acceptSuggestionOnEnter: 'on',
+        tabCompletion: 'on',
+        wordBasedSuggestions: 'off',
+        parameterHints: { enabled: App.settings.editor.intellisense !== false },
+        snippetSuggestions: 'top',
+        suggest: buildSuggestOptions(),
+        suggestSelection: 'first',
+        suggestFontSize: 13.5,
+        suggestLineHeight: 26
+    });
+
+    editor.onDidChangeCursorPosition(e => {
+        document.getElementById('cursor-pos').textContent = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
+        scheduleDiscordCursorUpdate(e.position.lineNumber, e.position.column);
+    });
+
+    editor.onDidChangeModelContent(() => {
+        const model = editor.getModel();
+        // With the same tab open in both panes they share a model and both
+        // editors report the change: the left editor handles it once.
+        if (editor === App.editor2 && App.editor && App.editor.getModel() === model) return;
+        const tab = getTabForModel(model);
+        if (tab) {
+            // tab.content reads the model on demand (bindTabContent). A length
+            // check settles most keystrokes; equal lengths compare the text.
+            const original = tab.original;
+            const modified = typeof original !== 'string'
+                || model.getValueLength() !== original.length
+                || model.getValue() !== original;
+            if (tab.modified !== modified) {
+                tab.modified = modified;
+                renderTabs();
+            }
+            if (!App.isSettingValue && tab.path && window.FileExplorer?.notifyBuildEvent) {
+                window.FileExplorer.notifyBuildEvent(tab.path, 'edit');
+            }
+            if (!tab.path && typeof LocalHistory !== 'undefined') {
+                LocalHistory.scheduleUntitledBackup(tab);
+            }
+        }
+        clearErrorDecorations(model);
+
+        if (tab) scheduleAutoSave(tab);
+        scheduleSessionSave();
+
+
+        scheduleLiveCheck();
+    });
+
+
+    // Auto-indentation after control statements
+    editor.onKeyDown((e) => {
+        if (e.keyCode === monaco.KeyCode.Enter && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+            const position = editor.getPosition();
+            const model = editor.getModel();
+            if (!model) return;
+
+            const lineNumber = position.lineNumber;
+            const lineContent = model.getLineContent(lineNumber).trim();
+            const fullLine = model.getLineContent(lineNumber);
+            const currentIndent = fullLine.match(/^\s*/)[0];
+
+            // Skip custom handling if line already ends with a brace - let Monaco handle it
+            if (/[{}]\s*$/.test(lineContent)) return;
+
+            // Also skip if cursor is not at end of line (user is editing mid-line)
+            const lineMaxCol = model.getLineMaxColumn(lineNumber);
+            if (position.column < lineMaxCol) return;
+
+            // Case 1: Check if current line ends with statement after control structure (dedent)
+            // If line ends with ; and previous line was a control statement without {}, dedent
+            if (lineNumber > 1 && /;\s*$/.test(lineContent)) {
+                const prevLine = model.getLineContent(lineNumber - 1).trim();
+                const isPrevControlStatement = (
+                    /^\s*(if|while|for|switch)\s*\([^)]*\)\s*$/.test(prevLine) ||
+                    /^\s*(else|do)\s*$/.test(prevLine)
+                );
+
+                if (isPrevControlStatement) {
+                    // Dedent: go back to previous line's indent level
+                    e.preventDefault();
+                    const prevFullLine = model.getLineContent(lineNumber - 1);
+                    const prevIndent = prevFullLine.match(/^\s*/)[0];
+
+                    editor.executeEdits('auto-dedent', [{
+                        range: new monaco.Range(lineNumber, lineMaxCol, lineNumber, lineMaxCol),
+                        text: '\n' + prevIndent
+                    }]);
+
+                    editor.setPosition({
+                        lineNumber: lineNumber + 1,
+                        column: prevIndent.length + 1
+                    });
+                    return;
+                }
+            }
+
+            // Case 2: Check if line ends with control statement pattern (indent)
+            // Match: if/while/for/else followed by condition, or do/else/case/default with :
+            const shouldIndent = (
+                // if (condition), while (condition), for (condition)
+                /^\s*(if|while|for|switch)\s*\([^)]*\)\s*$/.test(lineContent) ||
+                // else, do
+                /^\s*(else|do)\s*$/.test(lineContent) ||
+                // case value:, default:
+                /^\s*(case\s+.+|default)\s*:\s*$/.test(lineContent)
+            );
+
+            if (shouldIndent) {
+                e.preventDefault();
+
+                const tabChar = '\t'; // Use tab character
+
+                // Insert newline + current indent + one more tab
+                const newIndent = currentIndent + tabChar;
+
+                editor.executeEdits('auto-indent', [{
+                    range: new monaco.Range(lineNumber, lineMaxCol, lineNumber, lineMaxCol),
+                    text: '\n' + newIndent
+                }]);
+
+                // Set cursor position
+                editor.setPosition({
+                    lineNumber: lineNumber + 1,
+                    column: newIndent.length + 1
+                });
+            }
+        }
+    });
+
+    // No editor.addCommand() shortcuts here on purpose. Monaco swallowed those
+    // keys before the app's shortcut table (initShortcuts) could see them, so
+    // inside the editor F10/F11 always meant Run/Build even mid-debug (instead
+    // of Step Over/Into), Shift+F5 stopped the wrong thing, and keybindings
+    // changed in Settings had no effect. initShortcuts() now listens in the
+    // capture phase and is the single place that maps keys to actions.
+
+    // Monaco disposes a model it created itself as soon as another one is
+    // attached, which would leave the editor with NO model once the last tab
+    // closes. Give it an explicit placeholder model that we own instead.
+    showEmptyModel(editor);
+
+    // Prevent accidental drops into editor (from dragging panels/UI elements)
+    const editorContainer = document.getElementById(containerId);
+    if (editorContainer) {
+        editorContainer.addEventListener('dragover', (e) => {
+            // Block internal UI drags (panels, tabs)
+            if (e.dataTransfer.types.includes('application/x-sameko-panel') ||
+                e.dataTransfer.types.includes('application/x-sameko-tab')) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.dataTransfer.effectAllowed = 'none';
+                e.dataTransfer.dropEffect = 'none';
+            }
+            // Allow file drops and external text
+        }, true);
+
+        editorContainer.addEventListener('drop', (e) => {
+            // Block internal UI drops
+            if (e.dataTransfer.types.includes('application/x-sameko-panel') ||
+                e.dataTransfer.types.includes('application/x-sameko-tab')) {
+                e.preventDefault();
+                e.stopPropagation();
+                return false;
+            }
+            // Allow file and external text drops to proceed
+        }, true);
+    }
+
+    if (window.MarkdownPreview) MarkdownPreview.attach(editor);
+
+    enableNeovideCursorTrail(editor);
+    applyVimMode(editor);
+
+    return editor;
+}
+
+
+/**
+ * Neovide-like elastic damped spring cursor trail. A canvas draws a polygon between the four
+ * corners of the editor cursor; each corner follows on a damped spring. The trail is created
+ * once; each editor's cursor moves wake the animation, which stops again when the cursor settles.
+ */
+let _cursorTrail = null;
+function enableNeovideCursorTrail(editor) {
+    if (!_cursorTrail) _cursorTrail = createCursorTrail();
+    editor.onDidChangeCursorPosition(_cursorTrail.cursorMoved);
+    editor.onDidScrollChange(_cursorTrail.viewMoved);
+    editor.onDidLayoutChange(_cursorTrail.viewMoved);
+    // Learn where the cursor is on focus, so the first jump after it (Vim's :w prompt, another
+    // panel) has a trail instead of starting there.
+    editor.onDidFocusEditorText(_cursorTrail.viewMoved);
+}
+
+function createCursorTrail() {
+    // The canvas sits inside the focused editor's .overflow-guard, so the editor clips it and
+    // Monaco's widgets (find 35, parameter hints 39, suggest 40) and the app's dialogs stay above.
+    const canvas = document.createElement('canvas');
+    canvas.id = 'sameko-cursor-canvas';
+    Object.assign(canvas.style, {
+        pointerEvents: 'none',
+        position: 'absolute',
+        top: '0',
+        left: '0',
+        zIndex: '30'
+    });
+    const context = canvas.getContext('2d');
+    // Seconds the slowest (trailing) corner takes to catch up with the cursor.
+    const TRAIL_LENGTH = 0.1;
+    let canvasWidth = 0;
+    let canvasHeight = 0;
+    let canvasRatio = 0;
+
+    // Moves the canvas into `guard` and sizes its backing store at device pixels, so the trail
+    // is not blurry on scaled displays.
+    function fitCanvas(guard) {
+        if (canvas.parentNode !== guard) guard.appendChild(canvas);
+        const ratio = window.devicePixelRatio || 1;
+        const width = guard.clientWidth;
+        const height = guard.clientHeight;
+        if (width === canvasWidth && height === canvasHeight && ratio === canvasRatio) return;
+        canvasWidth = width;
+        canvasHeight = height;
+        canvasRatio = ratio;
+        canvas.width = Math.round(width * ratio);
+        canvas.height = Math.round(height * ratio);
+        canvas.style.width = width + 'px';
+        canvas.style.height = height + 'px';
+        context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    }
+
+    class DampedSpring {
+        constructor(animationLength) {
+            this.position = 0;
+            this.velocity = 0;
+            this.animationLength = animationLength;
+        }
+
+        /**
+         * Update the spring simulation over delta time.
+         * @param {number} deltaTime - Time step in seconds.
+         * @returns {boolean} True if the spring is still active.
+         */
+        update(deltaTime) {
+            if (this.animationLength <= deltaTime || Math.abs(this.position) < 0.001) {
+                this.reset();
+                return false;
+            }
+            const omega = 4.0 / this.animationLength;
+            const currentPosition = this.position;
+            const initialSlope = this.position * omega + this.velocity;
+            const decayFactor = Math.exp(-omega * deltaTime);
+
+            this.position = (currentPosition + initialSlope * deltaTime) * decayFactor;
+            this.velocity = decayFactor * (
+                -currentPosition * omega - initialSlope * deltaTime * omega + initialSlope
+            );
+            return Math.abs(this.position) >= 0.01;
+        }
+
+        reset() {
+            this.position = 0;
+            this.velocity = 0;
+        }
+    }
+
+    const relativeCornerPositions = [
+        { x: -0.5, y: -0.5 },
+        { x: 0.5, y: -0.5 },
+        { x: 0.5, y: 0.5 },
+        { x: -0.5, y: 0.5 }
+    ];
+
+    class CursorCorner {
+        constructor(relativePosition) {
+            this.relativePosition = relativePosition;
+            this.currentPosition = { x: 0, y: 0 };
+            this.previousDestination = { x: -1e5, y: -1e5 };
+            this.springX = new DampedSpring(TRAIL_LENGTH);
+            this.springY = new DampedSpring(TRAIL_LENGTH);
+        }
+
+        getDestination(centerX, centerY, width, height) {
+            return {
+                x: centerX + this.relativePosition.x * width,
+                y: centerY + this.relativePosition.y * height
+            };
+        }
+
+        jump(centerX, centerY, width, height, rank) {
+            const destination = this.getDestination(centerX, centerY, width, height);
+            const jumpVelocityX = (destination.x - this.previousDestination.x) / (width || 1);
+            const jumpVelocityY = (destination.y - this.previousDestination.y) / (height || 1);
+            const travelLength = Math.hypot(jumpVelocityX, jumpVelocityY);
+            const travelDirection = travelLength
+                ? { x: jumpVelocityX / travelLength, y: jumpVelocityY / travelLength }
+                : { x: 0, y: 0 };
+
+            const cornerLength = Math.hypot(this.relativePosition.x, this.relativePosition.y);
+            const cornerDirection = {
+                x: this.relativePosition.x / cornerLength,
+                y: this.relativePosition.y / cornerLength
+            };
+            const alignment = travelDirection.x * cornerDirection.x + travelDirection.y * cornerDirection.y;
+
+            // Leading corners move faster than trailing corners.
+            const trailFactors = [1.0, 0.9, 0.5, 0.3];
+            let animationDuration = TRAIL_LENGTH * (trailFactors[rank] || 1);
+
+            // Snap leading edges immediately to maintain structural stability.
+            if (alignment > 0.5) animationDuration = 0.02;
+
+            this.springX.animationLength = animationDuration;
+            this.springY.animationLength = animationDuration;
+
+            if (animationDuration > TRAIL_LENGTH * 0.6) {
+                this.springX.reset();
+                this.springY.reset();
+            }
+        }
+
+        update(centerX, centerY, width, height, deltaTime) {
+            const destination = this.getDestination(centerX, centerY, width, height);
+            if (destination.x !== this.previousDestination.x || destination.y !== this.previousDestination.y) {
+                this.springX.position = destination.x - this.currentPosition.x;
+                this.springY.position = destination.y - this.currentPosition.y;
+                this.previousDestination = { ...destination };
+            }
+            this.springX.update(deltaTime);
+            this.springY.update(deltaTime);
+            this.currentPosition.x = destination.x - this.springX.position;
+            this.currentPosition.y = destination.y - this.springY.position;
+
+            return Math.abs(this.springX.position) > 0.5 || Math.abs(this.springY.position) > 0.5;
+        }
+    }
+
+    const corners = relativeCornerPositions.map(
+        relativePosition => new CursorCorner(relativePosition)
+    );
+    let lastTime = 0;
+    let previousCenterX = null;
+    let previousCenterY = null;
+    let hiddenCursor = null;   // the Monaco cursor hidden while the trail draws over it
+    let running = false;
+    let idleFrames = 0;
+    let snapFrames = 0;
+    let lastCursorMove = -Infinity;
+
+    // Monaco moves its cursor element in its own animation frame, which can run after ours, so
+    // the loop stays alive for a few frames after the last movement before it stops.
+    const IDLE_FRAMES_BEFORE_STOP = 4;
+    // Frames that follow the cursor without a trail after a scroll or resize, until Monaco
+    // has drawn it at its new place on screen.
+    const SNAP_FRAMES = 3;
+    // A scroll this soon after a cursor move is the editor revealing the cursor (Ctrl+End,
+    // typing past the bottom): part of that move, so it keeps its trail.
+    const REVEAL_WINDOW_MS = 100;
+
+    function showHiddenCursor() {
+        if (hiddenCursor) hiddenCursor.style.opacity = '';
+        hiddenCursor = null;
+    }
+
+    function clearTrail(resetPosition = false) {
+        if (canvas.style.opacity !== '0') {
+            context.clearRect(0, 0, canvasWidth, canvasHeight);
+        }
+        canvas.style.opacity = '0';
+        showHiddenCursor();
+        corners.forEach(corner => {
+            corner.springX.reset();
+            corner.springY.reset();
+        });
+        if (resetPosition) {
+            previousCenterX = null;
+            previousCenterY = null;
+        }
+    }
+
+    function stop(resetPosition) {
+        clearTrail(resetPosition);
+        running = false;
+    }
+
+    function trailDisabled() {
+        return App.settings?.appearance?.cursorTrail === false;
+    }
+
+    function cursorMoved() {
+        lastCursorMove = performance.now();
+        // Monaco draws the moved cursor in its next frame, so the element still shows where the
+        // cursor was: if the trail lost track of it (blur, Vim's : prompt), start from there.
+        if (previousCenterX === null && snapFrames === 0 && !trailDisabled()) {
+            const cursor = findPrimaryCursor();
+            if (cursor) seedAt(cursor.getBoundingClientRect());
+        }
+        wake();
+    }
+
+    // Not filtered on visibility: Monaco's "blink" style (Vim's insert mode) hides the cursor
+    // with visibility: hidden every other half second, and it still has its place.
+    function findPrimaryCursor() {
+        for (const cursor of document.querySelectorAll('.monaco-editor.focused .cursors-layer .cursor')) {
+            const style = getComputedStyle(cursor);
+            if (style.display !== 'none' && !style.transform.includes('-10000px')) return cursor;
+        }
+        return null;
+    }
+
+    function seedAt(rect) {
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        corners.forEach(corner => {
+            const destination = corner.getDestination(centerX, centerY, rect.width, rect.height);
+            corner.currentPosition = destination;
+            corner.previousDestination = destination;
+            corner.springX.reset();
+            corner.springY.reset();
+        });
+        previousCenterX = centerX;
+        previousCenterY = centerY;
+    }
+
+    // Scrolling or resizing moves the cursor on screen but not in the text: the trail jumps
+    // there instead of smearing across the editor.
+    function viewMoved() {
+        if (performance.now() - lastCursorMove < REVEAL_WINDOW_MS) return;
+        snapFrames = SNAP_FRAMES;
+        wake();
+    }
+
+    // Starts the loop on editor activity; it stops itself once the cursor settles, so an idle
+    // editor costs no per-frame layout reads.
+    function wake() {
+        idleFrames = 0;
+        if (running || trailDisabled()) return;
+        running = true;
+        lastTime = performance.now();
+        requestAnimationFrame(animate);
+    }
+
+    function animate() {
+        if (trailDisabled()) {
+            stop(true);
+            return;
+        }
+
+        const currentTime = performance.now();
+        const deltaTime = Math.min((currentTime - lastTime) / 1000, 1 / 30);
+        lastTime = currentTime;
+
+        const primaryCursor = findPrimaryCursor();
+        const cursorRect = primaryCursor && primaryCursor.getBoundingClientRect();
+        const guard = primaryCursor && primaryCursor.closest('.overflow-guard');
+        if (!cursorRect || !guard || cursorRect.width === 0 || cursorRect.height === 0) {
+            // Right after focus Monaco has not drawn the cursor yet: wait for it while snapping.
+            if (snapFrames > 0) {
+                snapFrames--;
+                requestAnimationFrame(animate);
+                return;
+            }
+            stop(true);
+            return;
+        }
+        if (hiddenCursor && hiddenCursor !== primaryCursor) showHiddenCursor();
+        fitCanvas(guard);
+        const guardRect = guard.getBoundingClientRect();
+
+        const centerX = cursorRect.left + cursorRect.width / 2;
+        const centerY = cursorRect.top + cursorRect.height / 2;
+
+        if (snapFrames > 0) {
+            snapFrames--;
+            previousCenterX = null;   // re-seed at the cursor's new place, no trail
+        }
+
+        // Seed corner state after a reset; otherwise, rank corners by movement direction.
+        if (previousCenterX === null) {
+            seedAt(cursorRect);
+        } else if (centerX !== previousCenterX || centerY !== previousCenterY) {
+            const ranks = corners.map((corner, index) => {
+                const destination = corner.getDestination(
+                    centerX,
+                    centerY,
+                    cursorRect.width,
+                    cursorRect.height
+                );
+                const velocityX = destination.x - corner.previousDestination.x;
+                const velocityY = destination.y - corner.previousDestination.y;
+                const velocityLength = Math.hypot(velocityX, velocityY);
+                const direction = velocityLength
+                    ? { x: velocityX / velocityLength, y: velocityY / velocityLength }
+                    : { x: 0, y: 0 };
+                const cornerLength = Math.hypot(
+                    corner.relativePosition.x,
+                    corner.relativePosition.y
+                );
+                const alignment = direction.x * (corner.relativePosition.x / cornerLength)
+                    + direction.y * (corner.relativePosition.y / cornerLength);
+                return { index, alignment };
+            })
+                .sort((a, b) => a.alignment - b.alignment)
+                .map((item, cornerRank) => ({ index: item.index, rank: cornerRank }))
+                .reduce((accumulator, current) => {
+                    accumulator[current.index] = current.rank;
+                    return accumulator;
+                }, []);
+
+            corners.forEach((corner, index) => {
+                corner.jump(
+                    centerX,
+                    centerY,
+                    cursorRect.width,
+                    cursorRect.height,
+                    ranks[index]
+                );
+            });
+        }
+        previousCenterX = centerX;
+        previousCenterY = centerY;
+
+        let isMoving = false;
+        corners.forEach(corner => {
+            if (
+                corner.update(
+                    centerX,
+                    centerY,
+                    cursorRect.width,
+                    cursorRect.height,
+                    deltaTime
+                )
+            ) {
+                isMoving = true;
+            }
+        });
+
+        if (isMoving) {
+            idleFrames = 0;
+            // Corners are in viewport coordinates; the canvas starts at the guard's corner.
+            context.clearRect(0, 0, canvasWidth, canvasHeight);
+            context.beginPath();
+            context.moveTo(
+                corners[0].currentPosition.x - guardRect.left,
+                corners[0].currentPosition.y - guardRect.top
+            );
+            for (let cornerIndex = 1; cornerIndex < 4; cornerIndex++) {
+                context.lineTo(
+                    corners[cornerIndex].currentPosition.x - guardRect.left,
+                    corners[cornerIndex].currentPosition.y - guardRect.top
+                );
+            }
+            context.closePath();
+
+            context.fillStyle = getComputedStyle(primaryCursor).backgroundColor || '#eb6b9d';
+            context.fill();
+
+            canvas.style.opacity = '1';
+            primaryCursor.style.opacity = '0';
+            hiddenCursor = primaryCursor;
+        } else {
+            canvas.style.opacity = '0';
+            showHiddenCursor();
+            if (++idleFrames >= IDLE_FRAMES_BEFORE_STOP) {
+                running = false;
+                return;
+            }
+        }
+        requestAnimationFrame(animate);
+    }
+
+    return { cursorMoved, viewMoved };
+}

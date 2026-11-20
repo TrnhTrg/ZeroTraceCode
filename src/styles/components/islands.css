@@ -1,0 +1,1214 @@
+/* Floating islands: the header groups, explorer, editor, bottom panel and status bar are separate
+ * rounded cards with gaps that let the app background show through. Loaded after toolbar.css, so
+ * it overrides the full-width bars of theme.css / themes.css for every theme. Colours come from
+ * theme tokens only, and nothing here uses backdrop blur (it costs a repaint of the background
+ * video on every frame).
+ *
+ * Style: bold and round, with thin lines. Cards have a 1.5px theme --border and no shadow,
+ * pills are fully round, labels are extra bold. */
+
+:root {
+    --island-radius: 22px;
+    --island-gap: 10px;
+    /* A background value, not a colour: the theme's panel colour laid over the editor colour, so
+     * the explorer, header and status bar are solid like the editor (--bg-panel is see-through). */
+    --island-bg: linear-gradient(var(--bg-panel), var(--bg-panel)), var(--editor-bg);
+    --island-border: var(--border);
+    --island-line: 1.5px solid var(--island-border);
+    /* No soft shadows round the cards: the theme border separates them (see popups.css). */
+    --island-shadow: none;
+}
+
+/* ---- Header ---- */
+/* clip, not hidden: an overflow:hidden box can still be scrolled by script, and the header and
+ * the whole window were scrolled sideways once the tabs no longer fit. */
+.app-container,
+.app-container > .header-bar {
+    overflow: clip;
+}
+
+.app-container > .header-bar {
+    height: 60px;
+    padding: 0 8px 0 12px;
+    gap: var(--island-gap);
+    background: transparent;
+    border-bottom: none;
+    backdrop-filter: none;
+}
+
+.header-bar .header-island {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 46px;
+    padding: 0 6px;
+    border: none;
+    border-radius: 20px;
+    background: var(--island-bg);
+    box-shadow: none;
+    flex-shrink: 0;
+}
+
+/* Logo, explorer toggle and menus share one island. */
+#island-nav .logo {
+    padding: 4px 14px;
+    font-size: 18px;
+    font-weight: 700;
+    border: none;
+    border-radius: 999px;
+    margin-right: 2px;
+    box-shadow: none;
+}
+
+#island-nav .menu-btn {
+    font-weight: 800;
+    border-radius: 999px;
+}
+
+#island-nav .menu-group:not(.show) {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    gap: 0;
+}
+
+.header-bar .header-island .toggle-btn:not(.tool-group *) {
+    width: 36px;
+    height: 34px;
+    border-radius: 12px;
+    background: transparent;
+    box-shadow: none;
+}
+
+.header-bar .header-island .toggle-btn.active:not(.tool-group *) {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* Tabs island takes the free width; its empty part still drags the window. */
+.header-bar .tabs-wrap.header-island {
+    flex: 1;
+    min-width: 0;
+    padding: 0 6px;
+    gap: 4px;
+}
+
+.header-bar .tabs-container {
+    position: relative;
+    flex: 0 1 auto;
+    min-width: 0;
+    gap: 2px;
+    padding: 0;
+}
+
+/* Pill tabs: fully round and extra bold; the open file is a solid accent pill. */
+.header-bar .tabs-container .tab {
+    height: 32px;
+    padding: 0 8px 0 14px;
+    gap: 6px;
+    background: transparent;
+    border: none;
+    border-radius: 999px;
+    box-shadow: none;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 800;
+    transform: none;
+    transition: background-color var(--duration-fast) var(--ease-standard),
+        color var(--duration-fast) var(--ease-standard);
+}
+
+.header-bar .tabs-container .tab:hover {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--text-primary);
+    box-shadow: none;
+    transform: none;
+}
+
+.header-bar .tabs-container .tab.active {
+    background: var(--btn-primary-bg, var(--accent));
+    color: var(--btn-primary-text, #fff);
+    box-shadow: none;
+}
+
+.header-bar .tabs-container .tab.active .tab-x {
+    color: inherit;
+    opacity: 0.75;
+}
+
+.header-bar .tabs-container .tab.active .tab-dot {
+    background: currentColor;
+}
+
+.header-bar .tab-add {
+    border-radius: 999px;
+}
+
+/* Right island: panel toggles | Run | settings. */
+.header-bar .header-actions.header-island {
+    gap: 6px;
+}
+
+.header-bar .header-island .tool-group {
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.header-bar .header-island .tool-group::after {
+    content: '';
+    width: 1px;
+    height: 20px;
+    margin-left: 4px;
+    background: var(--island-border);
+}
+
+.header-bar > .sep {
+    display: none;
+}
+
+/* ---- Run: split button, Stop only while a program runs ---- */
+.header-bar .run-split {
+    display: flex;
+    align-items: stretch;
+    height: 34px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--btn-primary-bg, var(--accent));
+    box-shadow: none;
+    transition: transform 0.2s var(--ease-spring);
+}
+
+.header-bar .run-split:hover {
+    transform: translateY(-1px);
+}
+
+.header-bar .run-split:active {
+    transform: scale(0.96);
+    transition-duration: 0.06s;
+}
+
+/* One pill: the halves share the background and only a thin rule separates them. */
+.header-bar .run-split .action-btn.primary {
+    height: 100%;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    transform: none;
+}
+
+.header-bar .run-split .action-btn.primary:hover {
+    background: color-mix(in srgb, var(--btn-primary-text, #000) 10%, transparent);
+    transform: none;
+}
+
+.header-bar .run-split #btn-buildrun {
+    padding: 0 12px 0 16px;
+    font-size: 15px;
+    font-weight: 800;
+}
+
+.header-bar .run-split .run-split-caret {
+    width: 32px;
+    padding: 0 2px 0 0;
+    justify-content: center;
+    box-shadow: inset 1px 0 0 color-mix(in srgb, var(--btn-primary-text, #000) 22%, transparent);
+}
+
+.header-bar .run-split .run-split-caret > .ico {
+    width: 14px;
+    height: 14px;
+}
+
+.header-bar .run-split .run-split-caret.active > .ico,
+.header-bar .run-split .run-split-caret:hover > .ico {
+    transform: rotate(180deg);
+}
+
+.header-bar .run-split .run-split-caret:not(.active):hover > .ico {
+    transform: translateY(1px);
+}
+
+.header-bar .run-split:has(.running) {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.header-bar #btn-stop {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    justify-content: center;
+    border: none;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--error) 16%, transparent);
+    color: var(--error);
+    box-shadow: none;
+    animation: island-pop 0.35s var(--ease-spring);
+}
+
+.header-bar #btn-stop:hover {
+    background: color-mix(in srgb, var(--error) 26%, transparent);
+    transform: none;
+}
+
+.header-bar #btn-stop:disabled {
+    display: none;
+}
+
+.header-bar #btn-stop > .ico {
+    width: 16px;
+    height: 16px;
+}
+
+@keyframes island-pop {
+    from { transform: scale(0.6); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+/* Run menu (the caret): icons, shortcut on the right, a check on the open Debug panel. */
+#menu-runbtn .dropdown-item {
+    justify-content: flex-start;
+    gap: 10px;
+}
+
+#menu-runbtn .dropdown-item > .ico {
+    width: 17px;
+    height: 17px;
+    color: var(--accent);
+}
+
+#menu-runbtn .dropdown-item > .key {
+    margin-left: auto;
+    padding-left: 18px;
+}
+
+#menu-runbtn #btn-debug.active > .key::after {
+    content: 'On';
+    color: var(--accent);
+    font-weight: 800;
+}
+
+/* ---- Frosted glass without backdrop-filter ----
+ * A backdrop blur is recomputed on every frame the background changes, and the background is
+ * usually a playing video. The background is instead blurred once into a small image,
+ * --app-bg-blurred (updateFakeBlur in appearance.js), and glass surfaces paint it fixed to the
+ * window, so it lines up with the real background behind them. */
+.welcome-box,
+[data-theme] .welcome-box {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background:
+        linear-gradient(var(--welcome-box-bg, transparent), var(--welcome-box-bg, transparent)),
+        var(--app-bg-blurred, none) var(--app-bg-position, center center) / cover no-repeat fixed !important;
+}
+
+/* Full-screen dim layers behind dialogs: a plain dim. Blurring the UI under them cannot be
+ * faked, and the real blur re-rendered the background video under the whole window. */
+.local-history-overlay,
+.confirm-dialog-overlay,
+.confirm-overlay,
+.snippet-editor-overlay,
+.note-dialog-overlay,
+.update-overlay,
+.cc-overlay,
+.tc-overlay,
+.fullscreen-popup-overlay {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* ---- Content ---- */
+.content-wrapper > .explorer-sidebar {
+    background: var(--island-bg);
+    margin: 2px 0 12px 12px;
+    border: var(--island-line) !important;
+    border-radius: var(--island-radius);
+    box-shadow: var(--island-shadow);
+}
+
+.content-wrapper > .main {
+    padding: 2px 12px 12px;
+    gap: var(--island-gap);
+}
+
+/* With the explorer open, its 4px resizer is part of the gap. */
+.explorer-sidebar.visible + .explorer-resizer + .main {
+    padding-left: 6px;
+}
+
+/* ---- The one terminal (#terminal-view: output + input). It moves as a unit between its own
+ * section and the bottom panel; in the panel it shows only while the Terminal tab is open. ---- */
+.terminal-view {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+}
+
+.terminal-view > .terminal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.problems-panel:not([data-view="terminal"]) > .terminal-view {
+    display: none;
+}
+
+/* xterm scrolls itself. The padding sits on .xterm, which the fit addon subtracts; on the box
+ * around it, it was counted as rows, so the output ran past the box and the box showed a second,
+ * native scrollbar along its edge. */
+#terminal.terminal-body {
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+#terminal .xterm {
+    padding: 10px 2px 6px 14px;
+}
+
+/* xterm.css paints its viewport black; under the padding that showed as a black frame. */
+#terminal .xterm,
+#terminal .xterm .xterm-viewport,
+#terminal .xterm .xterm-scrollable-element {
+    background-color: var(--terminal-bg, #1e2933) !important;
+}
+
+/* xterm 6 draws its own scrollbar: 14px wide, square, against the edge. Make it the app's thin
+ * pill. xterm sets the slider's position inline; only its width and colour are changed here. */
+#terminal .xterm .xterm-scrollable-element > .scrollbar.vertical {
+    width: 12px !important;
+}
+
+#terminal .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
+    left: 3px !important;
+    width: 6px !important;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--terminal-text, #e0f0ff) 22%, transparent) !important;
+}
+
+#terminal .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider:hover {
+    background: color-mix(in srgb, var(--terminal-text, #e0f0ff) 40%, transparent) !important;
+}
+
+#terminal .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider.active {
+    background: color-mix(in srgb, var(--accent) 70%, transparent) !important;
+}
+
+/* The dark inset line xterm draws along the top once scrolled. */
+#terminal .xterm .xterm-scrollable-element > .shadow {
+    display: none !important;
+}
+
+/* ---- I/O column: Input, Output and Expected cards, each with a coloured dot ---- */
+/* No padding of its own: .main already insets the column, so the cards line up with the
+ * editor's top and the bottom panel's bottom edge. */
+.content-wrapper .io-section {
+    gap: var(--island-gap);
+    padding: 0;
+}
+
+.io-section > .io-panel {
+    flex: 1 1 0;
+    border: var(--island-line) !important;
+    border-radius: var(--island-radius);
+    /* Solid, like the editor card. Themes paint the textareas solid, so a see-through
+     * card made Output (a <pre>) look different from Input and Expected. */
+    background: var(--editor-bg) !important;
+    box-shadow: var(--island-shadow);
+}
+
+.io-section .panel-textarea,
+.io-section .diff-display {
+    background: transparent !important;
+}
+
+.io-section > .io-panel-input { --io-dot: var(--accent); }
+.io-section > .io-panel-output { --io-dot: var(--warning, #f5a23a); }
+.io-section > .io-panel-expected { --io-dot: var(--success, #4cc38a); }
+
+.io-section > .io-panel > .panel-head {
+    gap: 7px;
+    min-height: 0;
+    padding: 11px 10px 4px 14px;
+    background: transparent !important;
+    border-bottom: none !important;
+}
+
+.io-section .io-panel .panel-title {
+    padding: 0;
+    background: none;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+}
+
+.io-dot {
+    width: 9px;
+    height: 9px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--io-dot);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--io-dot) 22%, transparent);
+}
+
+.io-section .test-nav {
+    margin-left: auto;
+}
+
+/* ---- Input from a file (#49): a file bar and the first lines, in place of the textarea ---- */
+.io-file-btn,
+.io-file-clear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.io-file-btn:hover,
+.io-file-clear:hover {
+    background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+    color: var(--text-primary);
+}
+
+.io-panel-input.has-file .io-file-btn {
+    color: var(--accent);
+}
+
+.io-panel-input.has-file > #input-area {
+    display: none;
+}
+
+.io-file {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    padding: 2px 10px 10px;
+    gap: 6px;
+}
+
+.io-file.hidden {
+    display: none;
+}
+
+.io-file-bar {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    padding: 5px 4px 5px 10px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+}
+
+.io-file-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+    font-size: 12.5px;
+    font-weight: 800;
+}
+
+.io-file-meta {
+    margin-left: auto;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.io-file-head {
+    flex: 1;
+    min-height: 0;
+    margin: 0;
+    padding: 0 4px;
+    overflow: auto;
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', Consolas, monospace;
+    font-size: var(--panel-font-size, 13px);
+    line-height: 1.6;
+    white-space: pre;
+    user-select: text;
+}
+
+.io-file-head.error {
+    color: var(--error, #f05a6e);
+    white-space: pre-wrap;
+}
+
+.io-panel-input.drop-target {
+    outline: 2px dashed var(--accent);
+    outline-offset: -6px;
+}
+
+.io-section .panel-textarea,
+.io-section .diff-display,
+.io-output {
+    padding: 6px 14px 12px;
+}
+
+/* Output: read-only text of the last run. */
+.io-output {
+    flex: 1;
+    min-height: 0;
+    margin: 0;
+    overflow: auto;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', Consolas, monospace;
+    font-size: var(--panel-font-size, 13px);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    user-select: text;
+}
+
+.io-output.empty::before {
+    content: attr(data-placeholder);
+    color: var(--text-muted);
+}
+
+.io-verdict {
+    margin-left: auto;
+    flex-shrink: 0;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.io-verdict.hidden { display: none; }
+.io-verdict.ac { background: color-mix(in srgb, var(--success, #4cc38a) 22%, transparent); color: var(--success, #4cc38a); }
+.io-verdict.wa { background: color-mix(in srgb, var(--error, #f05a6e) 20%, transparent); color: var(--error, #f05a6e); }
+.io-verdict.running { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); }
+.io-verdict.stopped { background: color-mix(in srgb, var(--text-primary) 10%, transparent); color: var(--text-secondary); }
+
+/* ---- Explorer: folder name, filter pill, then Recent / Files / Contest / Collections ---- */
+.explorer-sidebar > .explorer-header {
+    padding: 10px 8px 6px 16px;
+    gap: 6px;
+    background: transparent;
+    border-bottom: none;
+}
+
+.explorer-sidebar .explorer-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text-primary);
+}
+
+.explorer-sidebar .explorer-actions {
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.explorer-sidebar .explorer-action-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+}
+
+.explorer-sidebar:not(.has-folder) .folder-only {
+    display: none;
+}
+
+.explorer-filter {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    height: 32px;
+    margin: 0 10px 4px;
+    padding: 0 6px 0 12px;
+    flex-shrink: 0;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+    color: var(--text-muted);
+    cursor: text;
+    transition: background-color 0.15s ease;
+}
+
+.explorer-filter:focus-within {
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    color: var(--accent);
+}
+
+.explorer-filter input {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 700;
+}
+
+.explorer-filter input::placeholder {
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.explorer-filter-clear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: none;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.explorer-filter-clear.hidden {
+    display: none;
+}
+
+.explorer-sidebar .explorer-tree {
+    padding: 0 0 10px;
+}
+
+/* Section headers: no rules between sections, the whole header toggles. */
+.explorer-sidebar .cat-section,
+.explorer-sidebar .cp-sub-contest-section,
+.explorer-sidebar .explorer-recent-section {
+    border-bottom: none;
+    padding: 0;
+    margin: 0;
+    opacity: 1;
+}
+
+.explorer-sidebar .cat-section-header {
+    margin: 6px 0 2px;
+    padding: 6px 12px 4px 10px;
+}
+
+.explorer-sidebar .cat-empty-hint {
+    display: none;
+}
+
+.explorer-sidebar .ex-section-header {
+    cursor: pointer;
+}
+
+.explorer-sidebar .cat-section-title {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    color: var(--text-secondary);
+}
+
+/* Rows: pills inset from the card edge. */
+.explorer-sidebar .explorer-item {
+    gap: 7px;
+    margin: 1px 8px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    padding-right: 6px;
+    border-radius: 999px;
+    font-weight: 700;
+}
+
+.explorer-sidebar .explorer-item-name {
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.explorer-sidebar .explorer-item.has-status:not(:hover):not(.active) {
+    background: transparent;
+}
+
+.explorer-sidebar .explorer-item.selected {
+    outline: none;
+    background: color-mix(in srgb, var(--accent) 12%, transparent) !important;
+}
+
+.explorer-sidebar .explorer-item.active,
+.explorer-sidebar .explorer-item.active.selected {
+    background: var(--btn-primary-bg, var(--accent)) !important;
+    color: var(--btn-primary-text, #fff);
+    box-shadow: none;
+}
+
+.explorer-sidebar .explorer-item.active .explorer-icon {
+    color: inherit !important;
+}
+
+.explorer-sidebar .explorer-item.build-file {
+    opacity: 0.5;
+    cursor: default;
+}
+
+/* Indent guide under an open folder, through the centre of its arrow (--guide from JS). */
+.explorer-sidebar .explorer-children {
+    position: relative;
+}
+
+.explorer-sidebar .explorer-children::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    left: calc(var(--guide, 14px) + 8px);
+    width: 1.5px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--text-primary) 14%, transparent);
+    pointer-events: none;
+}
+
+/* Status pill at the end of a row: hidden until hover, solid once set; click cycles it. */
+.explorer-sidebar .explorer-mark-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: auto;
+    min-width: 16px;
+    height: 18px;
+    margin-left: auto;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+    color: var(--text-secondary);
+    font-size: 10.5px;
+    font-weight: 800;
+    opacity: 0;
+}
+
+.explorer-sidebar .explorer-item:hover .explorer-mark-btn {
+    opacity: 0.8;
+}
+
+.explorer-sidebar .explorer-mark-btn.set,
+.explorer-sidebar .explorer-item:hover .explorer-mark-btn.set {
+    opacity: 1;
+}
+
+.explorer-sidebar .explorer-mark-btn.status-done { background: color-mix(in srgb, var(--success, #4caf50) 22%, transparent) !important; color: var(--success, #4caf50); }
+.explorer-sidebar .explorer-mark-btn.status-stuck { background: color-mix(in srgb, var(--error, #f44336) 20%, transparent) !important; color: var(--error, #f44336); }
+.explorer-sidebar .explorer-mark-btn.status-working { background: color-mix(in srgb, var(--warning, #ffc107) 24%, transparent) !important; color: color-mix(in srgb, var(--warning, #ffc107) 80%, var(--text-primary)); }
+.explorer-sidebar .explorer-mark-btn.status-review { background: color-mix(in srgb, var(--accent) 22%, transparent) !important; color: var(--accent); }
+
+.explorer-sidebar .explorer-item.active .explorer-mark-btn {
+    background: color-mix(in srgb, var(--btn-primary-text, #fff) 24%, transparent) !important;
+    color: var(--btn-primary-text, #fff);
+}
+
+.explorer-sidebar .child-count {
+    margin-left: 0;
+    padding: 0 6px;
+    font-size: 10px;
+    font-weight: 800;
+    background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+    color: var(--text-secondary);
+}
+
+.explorer-folder-done {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--success, #4caf50);
+}
+
+.explorer-item.active .explorer-folder-done {
+    color: inherit;
+}
+
+/* Filter results: matched text highlighted, the folder it lives in after the name. */
+.explorer-sidebar .explorer-item-name mark {
+    padding: 0 1px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--accent) 38%, transparent);
+    color: inherit;
+}
+
+/* The name keeps its width; the folder takes what is left and truncates first. */
+.explorer-sidebar .explorer-item.filter-hit .explorer-item-name {
+    flex: 0 1 auto;
+    min-width: 48px;
+}
+
+.explorer-item-dir {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+
+.explorer-item.active .explorer-item-dir {
+    color: inherit;
+    opacity: 0.75;
+}
+
+.explorer-filter-empty {
+    padding: 18px 16px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+
+.explorer-build-toggle {
+    display: block;
+    margin: 6px auto 2px;
+    padding: 4px 12px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.explorer-build-toggle:hover {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--text-primary);
+}
+
+/* The editor section only stacks the editor and the bottom panel; each is its own card. */
+/* Performance Mode paints panels solid (theme.css); this wrapper must stay clear, or it fills the
+ * gap and the corners around the rounded cards. */
+.main .editor-section,
+body.performance-mode .main .editor-section {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0;
+    box-shadow: none !important;
+    backdrop-filter: none;
+    overflow: visible;
+}
+
+.editor-section > .editors-container {
+    border: var(--island-line);
+    border-radius: var(--island-radius);
+    background: var(--editor-bg);
+    box-shadow: var(--island-shadow);
+    overflow: hidden;
+}
+
+/* The gap between the editor and the bottom panel is its resizer. A grip in the middle shows it
+ * can be dragged; without it the gap read as a stray strip of background. */
+.editor-section > #resizer-problems {
+    position: relative;
+    height: var(--island-gap);
+    flex-shrink: 0;
+    background: transparent;
+}
+
+.editor-section > #resizer-problems::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 40px;
+    height: 5px;
+    margin: -1px 0 0 -20px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--text-primary) 28%, transparent);
+    transition: width 0.25s var(--ease-spring), margin 0.25s var(--ease-spring), background-color var(--duration-fast) var(--ease-standard);
+}
+
+.editor-section > #resizer-problems:hover::before,
+.editor-section > #resizer-problems.dragging::before {
+    width: 72px;
+    margin-left: -36px;
+    background: var(--accent);
+}
+
+.editor-section > #resizer-problems.collapsed {
+    pointer-events: none;
+}
+
+.editor-section > #resizer-problems.collapsed::before {
+    display: none;
+}
+
+.editor-section > .problems-panel {
+    border: var(--island-line) !important;
+    border-radius: var(--island-radius);
+    box-shadow: var(--island-shadow);
+    overflow: hidden;
+}
+
+.main > .io-section,
+.main > .terminal-section {
+    border-radius: var(--island-radius);
+}
+
+/* The docked terminal's padding takes xterm's own background (--terminal-bg, set by
+ * syncTerminalTheme); dark themes painted it --bg-secondary, a black frame round the output. */
+.editor-section > .problems-panel .terminal-body {
+    background: var(--terminal-bg);
+}
+
+/* Debug panel: a column of the layout like the explorer (built by debugger-ui.js). */
+.content-wrapper > #sameko-debug-panel {
+    border: var(--island-line);
+    border-radius: var(--island-radius);
+    box-shadow: var(--island-shadow);
+}
+
+/* Collapsed bottom panel: only its tab strip. */
+.editor-section > .problems-panel.collapsed {
+    height: auto !important;
+    min-height: 0 !important;
+    flex: none !important;
+}
+
+.problems-panel.collapsed > :not(.panel-head) {
+    display: none !important;
+}
+
+.problems-panel.collapsed > .panel-head {
+    border-bottom-color: transparent;
+}
+
+.problems-panel .panel-collapse {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    margin-left: auto;
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.problems-panel .panel-collapse:hover {
+    background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+    color: var(--text-primary);
+}
+
+.problems-panel .panel-collapse > .ico {
+    width: 14px;
+    height: 14px;
+    transition: transform 0.3s var(--ease-spring);
+}
+
+.problems-panel.collapsed .panel-collapse > .ico {
+    transform: rotate(180deg);
+}
+
+.problems-panel .panel-collapse + .panel-close {
+    margin-left: 0;
+}
+
+/* ---- Status bar ---- */
+.app-container > .status-bar {
+    height: 30px;
+    margin: 0 12px 10px;
+    padding: 0 14px;
+    border: none;
+    border-radius: 999px;
+    background: var(--island-bg);
+    box-shadow: none;
+    font-weight: 800;
+}
+
+.status-bar .hidden,
+.problems-panel .problem-count.hidden {
+    display: none;
+}
+
+.status-bar .status-right {
+    gap: 14px;
+}
+
+.status-bar .diagnostics-summary {
+    gap: 10px;
+}
+
+.status-bar .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+    background: none;
+    border: none;
+    font-weight: 800;
+}
+
+.status-bar .status-badge.error {
+    color: var(--error);
+}
+
+.status-bar .status-badge.warning {
+    color: var(--warning);
+}
+
+.status-bar .status-badge.zero {
+    color: var(--text-muted);
+    opacity: 0.75;
+}
+
+.status-bar .status-item > .ico,
+.status-bar .status-badge > .ico {
+    width: 13px;
+    height: 13px;
+}
+
+.status-bar .status-run {
+    gap: 4px;
+}
+
+/* Vim Mode: mode, pending keys, and the : / search prompt (built by monaco-vim). */
+.status-bar .vim-status {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent);
+    white-space: pre;
+}
+
+.status-bar .vim-status-pane > span + span:not(:empty) {
+    margin-left: 10px;
+}
+
+.status-bar .vim-status input {
+    width: 240px;
+    padding: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--text-primary);
+    font: inherit;
+}
+
+.status-bar .status-run > .ico {
+    opacity: 0.75;
+}
+
+.status-bar .status-run > .ico + span + .ico {
+    margin-left: 6px;
+}
+
+.status-bar .status-std {
+    border: 0;
+    font: inherit;
+    cursor: pointer;
+    padding: 1px 10px;
+    border-radius: 999px;
+    background: var(--btn-primary-bg, var(--accent));
+    color: var(--btn-primary-text, #fff);
+}
+
+.status-bar .status-std::after { content: ' ▾'; }
+.workspace-language-picker { cursor: pointer; }
+.material-file-icon { object-fit: contain; flex-shrink: 0; vertical-align: middle; }
+.test-result-item.status-pending, .test-results-summary.is-incomplete { border-color: #d8a63c; background: #d8a63114; }
+.test-result-status.pending { color: #f3ce72; background: #71541d; }
+.test-result-item.status-AC, .test-results-summary.all-passed { border-color: #39aa63; }
+.test-result-status.AC { background: #238342; color: #fff; }
+.test-result-item.status-WA, .test-result-item.status-RE, .test-result-item.status-TLE, .test-result-item.status-CE, .test-results-summary.has-failed { border-color: #ef5360; background: #ef536014; }
+.test-result-status.WA, .test-result-status.RE, .test-result-status.TLE, .test-result-status.CE { background: #b82d3a; color: #fff; }
+.test-result-item.status-running, .test-results-summary.is-running { border-color: #58b9eb; background: #58b9eb18; }
+.test-result-status.running { color: #fff; background: #23688d; }
+.test-phase { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+.test-spinner, .test-result-status.running::before { content: ''; display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: test-spin .8s linear infinite; }
+.test-result-status.running::before { margin-right: 5px; }
+.test-results-summary { flex-wrap: wrap; }
+@keyframes test-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .test-spinner, .test-result-status.running::before { animation: none; } }
+.welcome-btns { flex-wrap: wrap; }
+.welcome-box { width: min(620px, calc(100% - 32px)); max-width: 620px; box-sizing: border-box; }
+.welcome-btn { padding: 16px 12px; white-space: nowrap; }
+.workspace-language-picker:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+.status-bar .status-std:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+
+@media (max-width: 1100px) {
+    .app-container > .header-bar {
+        padding: 0 6px 0 8px;
+        gap: 6px;
+    }
+
+    .header-bar .header-island {
+        height: 42px;
+        padding: 0 4px;
+    }
+}
+
+@media (max-width: 850px) {
+    .header-bar .header-island .tool-group::after {
+        display: none;
+    }
+
+    .status-bar .status-run,
+    .status-bar .live-check-state {
+        display: none;
+    }
+}
+
+#settings-overlay [hidden] { display: none !important; }
+
+#language-settings .setting-row > select {
+    flex: 1;
+    min-width: 0;
+    max-width: 380px;
+    text-overflow: ellipsis;
+}
+#language-settings .setting-row > input:not([type="checkbox"]),
+#language-settings .setting-row > textarea { min-width: 0 !important; max-width: 100%; }
+
+/* Collection verdicts use the same semantic colors as the Tests panel. */
+:root { --cp-status-re: #ef5350; --cp-status-tle: #ef5350; --cp-status-testing: #64b5f6; }
+.cat-list-item-badge.cp-badge-re,
+.cat-list-item-badge.cp-badge-tle { color: #ef5350; background: rgba(239, 83, 80, .15); }
+.cat-list-item.cp-status-re,
+.cat-list-item.cp-status-tle { background: rgba(239, 83, 80, .06); }
+.cat-list-item-badge.cp-badge-testing { color: #64b5f6; background: rgba(100, 181, 246, .15); }
+.cat-list-item.cp-status-testing { background: rgba(100, 181, 246, .06); }
+
+/* Keep long settings names inside their buttons at every window size. */
+#settings-popup > .settings-container > .settings-sidebar {
+    flex-shrink: 0;
+    overflow-x: hidden;
+}
+#settings-popup > .settings-container > .settings-sidebar > .settings-tab {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.35;
+    min-height: 48px;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    gap: 8px;
+    padding: 10px;
+}
