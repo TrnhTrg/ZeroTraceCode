@@ -1,0 +1,16 @@
+{
+  "name": "ZeroTraceCode IDE",
+  "short_name": "ZeroTraceCode",
+  "description": "Hệ sinh thái học và luyện code C/C++, Python, Java & Giải thuật chuyên sâu",
+  "start_url": "/src/index.html",
+  "display": "standalone",
+  "background_color": "#0a0d14",
+  "theme_color": "#00ffcc",
+  "icons": [
+    {
+      "src": "/src/assets/icons/icon-256.png",
+      "sizes": "256x256",
+      "type": "image/png"
+    }
+  ]
+}

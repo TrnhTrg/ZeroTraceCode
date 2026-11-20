@@ -1,0 +1,20 @@
+{
+  "name": "zerotrace-code",
+  "version": "2.0.0",
+  "description": "ZeroTraceCode - Cloud IDE & Competitive Learning Platform by MRZXN",
+  "private": true,
+  "author": "MRZXN (ZeroTrace Team)",
+  "license": "MIT",
+  "scripts": {
+    "start": "npx serve .",
+    "dev": "python -m http.server 3000"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "dompurify": "^3.2.4",
+    "gsap": "^3.12.5",
+    "katex": "^0.16.11",
+    "marked": "^15.0.4"
+  }
+}
