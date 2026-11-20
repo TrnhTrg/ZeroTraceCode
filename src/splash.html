@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Semeko</title>
+    <!-- Link local fonts served by the app -->
+    <link rel="stylesheet" href="assets/fonts.css">
+    <!-- Sets the theme colours passed in the query string before the first paint. -->
+    <script src="splash.js"></script>
+    <style>
+        /* Defaults are Kawaii Dark; splash.js overrides them with the user's theme. */
+        :root {
+            --bg: #152535;
+            --panel: #1a2a3a;
+            --accent: #88c9ea;
+            --text: #e0f0ff;
+            --muted: #7990a0;
+            --accent-text: #10223d;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: transparent;
+        }
+
+        body {
+            padding: 14px;
+        }
+
+        .splash {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            position: relative;
+            overflow: hidden;
+            border-radius: 36px;
+            background:
+                radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--accent) 14%, transparent) 0, transparent 46%),
+                linear-gradient(160deg, var(--panel) 0%, color-mix(in srgb, var(--panel) 86%, var(--accent)) 100%);
+            border: 1.5px solid color-mix(in srgb, var(--accent) 30%, transparent);
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+            -webkit-app-region: drag;
+            animation: pop-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        }
+
+        :root[data-variant="light"] .splash {
+            box-shadow: 0 10px 28px rgba(40, 80, 120, 0.18);
+        }
+
+        @keyframes pop-in {
+            from { opacity: 0; transform: scale(0.94); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        /* Two soft blobs in the theme's accent, slowly turning. */
+        .blob {
+            position: absolute;
+            pointer-events: none;
+            border-radius: 42% 58% 63% 37% / 45% 40% 60% 55%;
+            background: var(--accent);
+        }
+
+        .blob-1 {
+            width: 230px;
+            height: 220px;
+            top: -110px;
+            left: -90px;
+            opacity: 0.12;
+            animation: turn 22s linear infinite;
+        }
+
+        .blob-2 {
+            width: 200px;
+            height: 190px;
+            bottom: -110px;
+            right: -70px;
+            opacity: 0.08;
+            animation: turn 26s linear infinite reverse;
+        }
+
+        @keyframes turn {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Bubbles drifting up. */
+        .bubble {
+            position: absolute;
+            bottom: -40px;
+            border-radius: 50%;
+            border: 2px solid color-mix(in srgb, var(--text) 16%, transparent);
+            background: color-mix(in srgb, var(--text) 4%, transparent);
+            animation: float-up 10s linear infinite;
+            pointer-events: none;
+        }
+
+        .bubble:nth-child(3) { width: 26px; height: 26px; left: 10%; animation-duration: 9s; }
+        .bubble:nth-child(4) { width: 14px; height: 14px; left: 30%; animation-duration: 12s; animation-delay: 2.5s; }
+        .bubble:nth-child(5) { width: 34px; height: 34px; left: 62%; animation-duration: 11s; animation-delay: 1s; }
+        .bubble:nth-child(6) { width: 18px; height: 18px; left: 84%; animation-duration: 10s; animation-delay: 3.5s; }
+
+        @keyframes float-up {
+            0% { transform: translate(0, 0) scale(0.8); opacity: 0; }
+            15%, 85% { opacity: 1; }
+            100% { transform: translate(18px, -360px) scale(1.1); opacity: 0; }
+        }
+
+        .logo {
+            position: relative;
+            z-index: 1;
+            width: 104px;
+            height: 104px;
+            object-fit: contain;
+            animation: bob 3.2s ease-in-out infinite;
+        }
+
+        @keyframes bob {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-6px); }
+        }
+
+        .title {
+            position: relative;
+            z-index: 1;
+            margin-top: 4px;
+            color: var(--text);
+            font-family: 'Fredoka', 'Nunito', 'Segoe UI', sans-serif;
+            font-size: 30px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+        }
+
+        /* Indeterminate progress: an accent pill sliding along a tinted track. */
+        .progress {
+            position: relative;
+            z-index: 1;
+            width: 132px;
+            height: 8px;
+            margin-top: 10px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: color-mix(in srgb, var(--accent) 18%, transparent);
+        }
+
+        .progress::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 44%;
+            height: 100%;
+            border-radius: 999px;
+            background: var(--accent);
+            animation: slide 1.3s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+        }
+
+        @keyframes slide {
+            0% { transform: translateX(-110%); }
+            100% { transform: translateX(240%); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .splash, .blob, .bubble, .logo { animation: none; }
+            .bubble { display: none; }
+            .progress::before { animation-duration: 2.6s; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="splash">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+
+        <img class="logo" src="assets/icons/icon-256.png" alt="Semeko">
+        <div class="title">Semeko</div>
+        <div style="font-size: 12px; color: var(--muted);">Upgraded from Semeko C++</div>
+        <div class="progress" role="progressbar" aria-label="Loading"></div>
+    </div>
+</body>
+
+</html>
