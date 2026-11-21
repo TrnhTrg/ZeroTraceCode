@@ -1,121 +1,61 @@
 /**
- * ZeroTraceCode - Authentication, Multi-User Cloud Sync & Security Engine
- * Kiến trúc đồng bộ chuẩn xác theo ZeroTraceEnglish của MRZXN
- * - Cổng ZeroTrace Portal: Nhập Gmail để đăng nhập trực tiếp & lưu tiến độ/code theo từng tài khoản
- * - Admin tối cao: trinhtruong.work@gmail.com (Trường Trịnh - MRZXN)
- * - Tách biệt 100% không gian code (VFS), lịch sử làm bài và thiết lập theo từng Gmail
- * - Đồng bộ thời gian thực đa thiết bị qua Firebase Firestore
- * - Lá chắn SecurityShield chống Bruteforce, spam bot
+ * ZeroTraceCode - Authentication, Multi-User Workspace Isolation & Cloud Sync
+ * Kiến trúc đồng bộ hệ sinh thái ZeroTrace của MRZXN
+ * - Cổng ZeroTrace Portal: Nhập Gmail để vào học & lưu mã nguồn riêng biệt theo từng tài khoản
+ * - Admin tối cao: trinhminhtruong2006@gmail.com & trinhtruong.work@gmail.com (Trường Trịnh - MRZXN)
+ * - Tách biệt 100% không gian code (VFS), bài tập và cấu hình theo từng Gmail
+ * - Đã tắt bỏ hoàn toàn khóa bảo mật 10 phút và nút Google OAuth theo yêu cầu
  */
 
 (function () {
   'use strict';
 
-  const AUTH_VERSION = 'v2_zerotrace_code';
-  const ADMIN_EMAIL = (window.SECURITY_CONFIG && window.SECURITY_CONFIG.adminEmail) || 'trinhtruong.work@gmail.com';
-  const ADMIN_NAME = (window.SECURITY_CONFIG && window.SECURITY_CONFIG.adminName) || 'Trường Trịnh (MRZXN)';
+  // Tự động giải phóng mọi khóa bảo mật cũ nếu còn tồn tại trong bộ nhớ trình duyệt
+  try {
+    localStorage.removeItem('zt_code_lockout');
+    localStorage.removeItem('zt_security_lockout');
+    const oldModal = document.getElementById('zt-security-modal');
+    if (oldModal) oldModal.remove();
+  } catch (_) {}
+
+  const AUTH_VERSION = 'v3_zerotrace_code';
+  const ADMIN_EMAILS = [
+    'trinhminhtruong2006@gmail.com',
+    'trinhtruong.work@gmail.com'
+  ];
+  const ADMIN_NAME = 'Trường Trịnh (MRZXN)';
 
   // ========================================================
-  // 1. SECURITY SHIELD (CHỐNG BRUTEFORCE, CHỐNG BOT)
+  // 1. SECURITY SHIELD (TOAST NOTIFIER - KHÔNG KHÓA MÀN HÌNH)
   // ========================================================
   const SecurityShield = {
-    failedAttempts: 0,
-    isLocked: false,
-    lockoutUntil: 0,
-    lastActionTimestamp: 0,
-
     init() {
-      const storedLock = localStorage.getItem('zt_code_lockout');
-      if (storedLock) {
-        const unlockTime = parseInt(storedLock, 10);
-        if (Date.now() < unlockTime) {
-          this.isLocked = true;
-          this.lockoutUntil = unlockTime;
-          this.showLockoutUI();
-        } else {
-          localStorage.removeItem('zt_code_lockout');
-        }
-      }
+      try {
+        localStorage.removeItem('zt_code_lockout');
+        localStorage.removeItem('zt_security_lockout');
+        const m = document.getElementById('zt-security-modal');
+        if (m) m.remove();
+      } catch (_) {}
     },
 
     recordFailedAttempt() {
-      this.failedAttempts++;
-      const maxAttempts = window.SECURITY_CONFIG?.antiBruteforce?.maxAttemptsPerMinute || 6;
-      if (this.failedAttempts >= maxAttempts) {
-        const lockMinutes = window.SECURITY_CONFIG?.antiBruteforce?.lockoutDurationMinutes || 10;
-        this.isLocked = true;
-        this.lockoutUntil = Date.now() + (lockMinutes * 60 * 1000);
-        localStorage.setItem('zt_code_lockout', this.lockoutUntil.toString());
-        this.showLockoutUI();
-        return false;
-      }
+      // Đã tắt khóa 10 phút theo yêu cầu
       return true;
     },
 
     resetFailedAttempts() {
-      this.failedAttempts = 0;
-      this.isLocked = false;
-      localStorage.removeItem('zt_code_lockout');
+      try {
+        localStorage.removeItem('zt_code_lockout');
+        localStorage.removeItem('zt_security_lockout');
+      } catch (_) {}
     },
 
     checkCanAct() {
-      const now = Date.now();
-      if (this.isLocked) {
-        if (now < this.lockoutUntil) {
-          const remainingSec = Math.ceil((this.lockoutUntil - now) / 1000);
-          this.showWarningToast(`🛡️ Hệ thống đang tạm khóa bảo mật. Vui lòng chờ ${remainingSec}s.`);
-          return false;
-        } else {
-          this.isLocked = false;
-          this.failedAttempts = 0;
-          localStorage.removeItem('zt_code_lockout');
-        }
-      }
-
-      const threshold = window.SECURITY_CONFIG?.antiBruteforce?.rapidClickThresholdMs || 400;
-      if (now - this.lastActionTimestamp < threshold) {
-        this.showWarningToast('⚠️ Phát hiện thao tác bất thường. Vui lòng thao tác chậm lại.');
-        return false;
-      }
-      this.lastActionTimestamp = now;
       return true;
     },
 
     showLockoutUI() {
-      let modal = document.getElementById('zt-security-modal');
-      if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'zt-security-modal';
-        modal.style.cssText = 'position:fixed;inset:0;background:rgba(5,8,16,0.92);backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;z-index:999999;font-family:inherit;';
-        modal.innerHTML = `
-          <div style="background:#0f172a;border:2px solid #ef4444;border-radius:16px;padding:2rem;max-width:420px;text-align:center;color:#f8fafc;box-shadow:0 0 35px rgba(239,68,68,0.4);">
-            <div style="font-size:3rem;margin-bottom:0.75rem;">🛡️</div>
-            <h3 style="color:#ef4444;font-size:1.4rem;margin:0 0 0.5rem;">CẢNH BÁO BẢO MẬT VIP</h3>
-            <p style="color:#94a3b8;font-size:0.9rem;line-height:1.5;">Phát hiện quá nhiều yêu cầu xác thực thất bại liên tiếp. Hệ thống tự động khóa bảo vệ phiên làm việc ZeroTraceCode.</p>
-            <div id="zt-lockout-timer" style="margin-top:1.25rem;font-weight:700;color:#f59e0b;font-size:1.1rem;background:#1e293b;padding:0.6rem 1rem;border-radius:8px;border:1px solid #334155;">Đang khóa...</div>
-          </div>
-        `;
-        document.body.appendChild(modal);
-      }
-      modal.style.display = 'flex';
-
-      const updateTimer = () => {
-        const remaining = Math.max(0, Math.ceil((this.lockoutUntil - Date.now()) / 1000));
-        const el = document.getElementById('zt-lockout-timer');
-        if (el) {
-          const m = Math.floor(remaining / 60);
-          const s = remaining % 60;
-          el.textContent = `Tự động mở khóa sau: ${m} phút ${s < 10 ? '0' : ''}${s} giây`;
-        }
-        if (remaining > 0 && this.isLocked) {
-          setTimeout(updateTimer, 1000);
-        } else {
-          this.isLocked = false;
-          localStorage.removeItem('zt_code_lockout');
-          modal.style.display = 'none';
-        }
-      };
-      updateTimer();
+      // Đã tắt hoàn toàn khóa màn hình
     },
 
     showWarningToast(msg) {
@@ -147,6 +87,12 @@
     getUserKey(optionalEmail) {
       const e = (optionalEmail || (this.currentUser ? this.currentUser.email : '') || '').toLowerCase().trim();
       return e ? e.replace(/[.#$[\]/]/g, '_') : 'guest';
+    },
+
+    isAdminEmail(email) {
+      if (!email) return false;
+      const clean = email.toLowerCase().trim();
+      return ADMIN_EMAILS.some(adm => adm.toLowerCase() === clean);
     },
 
     onUserChange(fn) {
@@ -185,10 +131,10 @@
       const savedEmail = (localStorage.getItem('zt_code_active_email') || '').trim().toLowerCase();
       const savedName = localStorage.getItem('zt_code_active_name') || '';
 
-      if (savedEmail === ADMIN_EMAIL.toLowerCase()) {
+      if (this.isAdminEmail(savedEmail)) {
         this.currentUser = {
           uid: 'admin_mrzxn',
-          email: ADMIN_EMAIL,
+          email: savedEmail,
           displayName: ADMIN_NAME,
           role: 'admin',
           isVIP: true
@@ -212,7 +158,7 @@
 
       // Nếu chưa có tài khoản nào đăng nhập -> Mở cổng đăng nhập ZeroTrace Portal
       if (!this.currentUser) {
-        setTimeout(() => this.showGatekeeperScreen(), 400);
+        setTimeout(() => this.showGatekeeperScreen(), 300);
       }
     },
 
@@ -226,25 +172,21 @@
         }
         this.firebaseAuth = firebase.auth();
         this.firestore = firebase.firestore();
-        this.googleProvider = new firebase.auth.GoogleAuthProvider();
-        this.googleProvider.setCustomParameters({ prompt: 'select_account' });
         this.isFirebaseReady = true;
 
         if (this.currentUser && this.currentUser.email) {
           this.syncFromCloud(this.currentUser.email);
         }
       } catch (e) {
-        console.warn('[ZeroTraceCode] Firebase init failed:', e);
+        console.warn('[ZeroTraceCode] Firebase init skipped:', e);
       }
     },
 
     // ----------------------------------------------------
-    // ĐĂNG NHẬP NHANH BẰNG GMAIL (CHỐNG POPUP BLOCK)
-    // CƠ CHẾ CHÍNH XÁC NHƯ ZEROTRACE ENGLISH
+    // ĐĂNG NHẬP TRỰC TIẾP BẰNG GMAIL (NHANH CHÓNG, MỞ TỰ DO)
     // ----------------------------------------------------
     loginWithEmailDirect(email) {
-      if (!SecurityShield.checkCanAct()) return;
-      if (!email) return;
+      if (!email) return false;
       email = email.toLowerCase().trim();
 
       if (!email.includes('@') || !email.includes('.')) {
@@ -252,18 +194,9 @@
         return false;
       }
 
-      const isAdmin = (email === ADMIN_EMAIL.toLowerCase());
-      const isWhitelisted = (window.SECURITY_CONFIG?.allowedEmails || []).some(e => e.toLowerCase().trim() === email);
-      const allowPublic = window.SECURITY_CONFIG?.allowPublicGoogleLogin === true;
-
-      // Kiểm tra Whitelist
-      if (!isAdmin && !isWhitelisted && !allowPublic) {
-        SecurityShield.recordFailedAttempt();
-        SecurityShield.showWarningToast(`⛔ Email "${email}" chưa được cấp quyền trong danh sách Whitelist!`);
-        return false;
-      }
-
       SecurityShield.resetFailedAttempts();
+
+      const isAdmin = this.isAdminEmail(email);
       const name = isAdmin ? ADMIN_NAME : email.split('@')[0];
 
       this.currentUser = {
@@ -305,29 +238,10 @@
 
       SecurityShield.showWarningToast(isAdmin
         ? `👑 Chào mừng Quản trị viên tối cao ${this.currentUser.displayName}!`
-        : `🎉 Xin chào ${this.currentUser.displayName}! Không gian code của bạn đã được tải.`
+        : `🎉 Xin chào ${this.currentUser.displayName}! Không gian code của bạn đã sẵn sàng.`
       );
 
       return true;
-    },
-
-    // Đăng nhập bằng Google Popup chính thống
-    async signInWithGoogle() {
-      if (!SecurityShield.checkCanAct()) return;
-      if (!this.isFirebaseReady) {
-        SecurityShield.showWarningToast('Đang khởi tạo Firebase... Vui lòng thử lại.');
-        return;
-      }
-
-      try {
-        const result = await this.firebaseAuth.signInWithPopup(this.googleProvider);
-        const user = result.user;
-        const email = (user.email || '').toLowerCase().trim();
-        this.loginWithEmailDirect(email);
-      } catch (error) {
-        console.error('Google Sign-in error:', error);
-        SecurityShield.showWarningToast(error.message || 'Lỗi đăng nhập Google.');
-      }
     },
 
     signOut() {
@@ -369,13 +283,12 @@
             localStorage.setItem('zt_code_settings_' + docId, JSON.stringify(data.settings));
           }
           this.updateSyncBadge('synced');
-          console.log(`[ZeroTraceCode Cloud] Đã đồng bộ không gian code cho Gmail: ${email}`);
           this.notifyListeners();
         } else {
           await this.syncToCloud();
         }
       } catch (err) {
-        console.warn('[ZeroTraceCode Cloud] Lỗi tải từ mây:', err);
+        console.warn('[ZeroTraceCode Cloud] Lưu trữ cục bộ active:', err);
         this.updateSyncBadge('local');
       }
     },
@@ -403,7 +316,6 @@
 
         this.updateSyncBadge('synced');
       } catch (err) {
-        console.warn('[ZeroTraceCode Cloud] Lỗi lưu lên mây:', err);
         this.updateSyncBadge('local');
       }
     },
@@ -441,7 +353,7 @@
     },
 
     // ========================================================
-    // CỔNG XÁC THỰC: ZEROTRACE PORTAL (CHUẨN ZEROTRACE ENGLISH)
+    // CỔNG XÁC THỰC: ZEROTRACE PORTAL (TRỰC TIẾP BẰNG GMAIL)
     // ========================================================
     showGatekeeperScreen() {
       let screen = document.getElementById('zt-gatekeeper-modal');
@@ -464,16 +376,13 @@
             <p style="font-size:0.875rem;color:#94a3b8;margin:0;">Nhập Gmail để vào học &amp; lưu mã nguồn, bài tập riêng biệt</p>
           </div>
 
-          <!-- Thông Báo -->
-          <div id="auth-alert-box" style="display:none;padding:0.75rem 1rem;border-radius:8px;font-size:0.825rem;font-weight:600;margin-bottom:1rem;line-height:1.5;"></div>
-
-          <!-- Form đăng nhập nhanh bằng Gmail -->
+          <!-- Form đăng nhập trực tiếp bằng Gmail -->
           <form id="form-direct-login" onsubmit="event.preventDefault();" style="display:flex;flex-direction:column;gap:1rem;">
             <div>
               <label for="input-direct-login-email" style="display:block;font-size:0.825rem;font-weight:700;color:#cbd5e1;margin-bottom:0.4rem;">
                 Địa chỉ Gmail của bạn:
               </label>
-              <input type="email" id="input-direct-login-email" placeholder="Ví dụ: ......@gmail.com" autofocus
+              <input type="email" id="input-direct-login-email" placeholder="Ví dụ: trinhminhtruong2006@gmail.com" autofocus
                 style="width:100%;padding:0.85rem 1rem;border-radius:10px;border:1.5px solid #334155;background:#1e293b;color:#fff;font-size:0.95rem;font-weight:600;outline:none;transition:border-color 0.2s;box-sizing:border-box;">
             </div>
 
@@ -482,20 +391,9 @@
             </button>
           </form>
 
-          <div style="display:flex;align-items:center;gap:10px;margin:1.25rem 0;">
-            <div style="flex:1;height:1px;background:#334155;"></div>
-            <span style="color:#64748b;font-size:0.75rem;">HOẶC XÁC THỰC GOOGLE</span>
-            <div style="flex:1;height:1px;background:#334155;"></div>
-          </div>
-
-          <button type="button" onclick="window.AuthManager.signInWithGoogle()" style="width:100%;background:#ffffff;color:#0f172a;border:none;padding:10px 14px;border-radius:10px;font-weight:700;font-size:0.9rem;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;box-shadow:0 2px 10px rgba(255,255,255,0.15);">
-            <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-            Đăng nhập qua Google OAuth
-          </button>
-
           <div style="margin-top:1.25rem;text-align:center;font-size:0.775rem;color:#94a3b8;line-height:1.5;">
-            ✨ Tự động tách biệt và lưu mã nguồn theo từng tài khoản Gmail.<br>
-            💾 Đồng bộ đám mây Firebase Firestore đa thiết bị.
+            ✨ Tự động tách biệt và lưu trữ mã nguồn theo từng tài khoản Gmail.<br>
+            💾 Dữ liệu lưu an toàn trên máy &amp; đồng bộ đám mây đa thiết bị.
           </div>
         </div>
       `;
@@ -566,7 +464,7 @@
             <span style="font-size:1.8rem;">👑</span>
             <div>
               <div style="font-weight:800;color:#f59e0b;font-size:0.95rem;">QUẢN TRỊ VIÊN TỐI CAO: ${ADMIN_NAME}</div>
-              <div style="font-size:0.8rem;color:#cbd5e1;">Gmail: <strong style="color:#00ffcc;">${ADMIN_EMAIL}</strong> | Toàn quyền kiểm soát hệ thống</div>
+              <div style="font-size:0.8rem;color:#cbd5e1;">Gmail: <strong style="color:#00ffcc;">${myEmail}</strong> | Toàn quyền kiểm soát hệ thống</div>
             </div>
           </div>
 
@@ -683,11 +581,16 @@
 
       SecurityShield.showWarningToast(`Đã xóa tài khoản: ${email}`);
       this.showProfileOrAdminModal();
+    },
+
+    getCurrentUser() {
+      return this.currentUser;
     }
   };
 
   window.SecurityShield = SecurityShield;
   window.AuthManager = AuthManager;
+  window.auth = AuthManager; // Alias
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => AuthManager.init());

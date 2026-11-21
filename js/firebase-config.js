@@ -1,4 +1,4 @@
-// ZeroTraceCode - Firebase & Security Whitelist Configuration
+// ZeroTraceCode - Firebase & Security Configuration
 // Đồng bộ hệ sinh thái ZeroTrace của MRZXN
 window.FIREBASE_CONFIG = {
   apiKey: "AIzaSyCO9bFJ-ulZjwiR6l5Ezi_DBNppX36ACk0",
@@ -11,27 +11,25 @@ window.FIREBASE_CONFIG = {
 };
 
 // ========================================================
-// CẤU HÌNH DANH SÁCH EMAIL ĐƯỢC PHÉP TRUY CẬP (WHITELIST)
+// CẤU HÌNH TÀI KHOẢN & PHÂN QUYỀN (CHUẨN HÓA ZEROTRACE)
 // ========================================================
 window.SECURITY_CONFIG = {
-  // Quản trị viên tối cao (Full VIP & Toàn quyền)
-  adminEmail: "trinhtruong.work@gmail.com",
-  adminName: "Trường Trịnh (MRZXN)",
-
-  // CHẾ ĐỘ BẢO MẬT VIP NGHIÊM NGẶT (WHITELIST):
-  // false = BẮT BUỘC EMAIL PHẢI CÓ TRONG DANH SÁCH allowedEmails THÌ MỚI ĐƯỢC VÀO HỌC/LUYỆN CODE!
-  // true  = Mở công khai cho mọi người
-  allowPublicGoogleLogin: false,
-
-  // DANH SÁCH EMAIL ĐƯỢC CẤP QUYỀN TRUY CẬP:
-  allowedEmails: [
+  // Danh sách Email Quản trị viên tối cao (Full VIP & Toàn quyền)
+  adminEmails: [
+    "trinhminhtruong2006@gmail.com",
     "trinhtruong.work@gmail.com"
   ],
+  adminEmail: "trinhminhtruong2006@gmail.com",
+  adminName: "Trường Trịnh (MRZXN)",
 
-  // Lá chắn chống Bruteforce, spam request & tấn công Burp Suite
+  // Mở tự do cho mọi tài khoản Gmail vào học, tự động cách ly dữ liệu
+  allowPublicGoogleLogin: true,
+
+  // Danh sách email (để trống vì cho phép mọi email vào học)
+  allowedEmails: [],
+
+  // TẮT HOÀN TOÀN KHÓA 10 PHÚT
   antiBruteforce: {
-    maxAttemptsPerMinute: 6,
-    lockoutDurationMinutes: 10,
-    rapidClickThresholdMs: 400
+    enabled: false
   }
 };
