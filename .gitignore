@@ -1,0 +1,13 @@
+# Logs & Temp
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+
+# Vercel
+.vercel
+
+# Local environment files
+.env.local
+.env.*.local
