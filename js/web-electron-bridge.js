@@ -771,13 +771,164 @@ for i in range(1, 6):
     closeWindow: () => {},
 
     // Productivity & Updates
-    productivitySnapshot: async () => {},
-    productivitySnapshotSync: () => {},
-    productivityRecovery: async () => null,
+    productivitySnapshot: async (val) => {
+      try {
+        localStorage.setItem('zt_code_snapshot', JSON.stringify(val));
+      } catch (_) {}
+      return { ok: true, data: true };
+    },
+    productivitySnapshotSync: (val) => {
+      try {
+        localStorage.setItem('zt_code_snapshot', JSON.stringify(val));
+      } catch (_) {}
+    },
+    productivityRecovery: async () => {
+      try {
+        const raw = localStorage.getItem('zt_code_snapshot');
+        return { ok: true, data: raw ? JSON.parse(raw) : null };
+      } catch (_) {
+        return { ok: true, data: null };
+      }
+    },
+    authoredCourseList: async () => ({ ok: true, data: [] }),
+    authoredCourseLesson: async () => ({ ok: false, error: 'Not found' }),
+    authoredCourseStatus: async () => ({ ok: true, data: null }),
+    courseList: async () => ({ ok: true, data: [] }),
+    courseChapter: async () => ({ ok: true, data: null }),
+    coursePage: async () => ({ ok: true, data: null }),
+    courseToolsSearch: async () => ({ ok: true, data: [] }),
+    courseToolsExam: async () => ({ ok: true, data: null }),
+    courseToolsGrade: async () => ({ ok: true, data: null }),
+    releaseBackup: async () => ({ ok: true, data: [] }),
     formatCode: async (code) => ({ success: true, formatted: code }),
     watchFile: async () => ({ success: true }),
     unwatchFile: async () => ({ success: true }),
-    reloadFile: async (filePath) => window.electronAPI.readFile(filePath)
+    reloadFile: async (filePath) => window.electronAPI.readFile(filePath),
+
+    // OJ Problem Browser
+    ojListProblems: async (options = {}) => {
+      const provider = options.provider || 'codeforces';
+      const search = (options.search || '').trim().toLowerCase();
+      const page = Number(options.page) || 0;
+      const pageSize = 30;
+
+      if (provider === 'codeforces') {
+        try {
+          if (!window._cfProblemsCache) {
+            const resp = await fetch('https://codeforces.com/api/problemset.problems?lang=en');
+            const json = await resp.json();
+            if (json.status === 'OK' && json.result?.problems) {
+              window._cfProblemsCache = json.result.problems.map(p => ({
+                provider: 'codeforces',
+                id: `${p.contestId}-${p.index}`,
+                contestId: p.contestId,
+                index: p.index,
+                number: `${p.contestId}${p.index}`,
+                title: p.name,
+                difficulty: String(p.rating || 'Unrated'),
+                rating: p.rating || 0,
+                tags: p.tags || [],
+                paid: false
+              }));
+            }
+          }
+          let items = window._cfProblemsCache || [];
+          if (search) {
+            items = items.filter(p => `${p.number} ${p.title} ${p.tags.join(' ')}`.toLowerCase().includes(search));
+          }
+          if (options.difficulty) {
+            const diff = options.difficulty.toLowerCase();
+            items = items.filter(p => diff === 'easy' ? p.rating > 0 && p.rating <= 1200 : diff === 'medium' ? p.rating > 1200 && p.rating <= 2000 : p.rating > 2000);
+          }
+          const total = items.length;
+          const paged = items.slice(page * pageSize, (page + 1) * pageSize);
+          return { ok: true, data: { items: paged, total, page, pageSize } };
+        } catch (e) {
+          return { ok: false, error: 'Không thể kết nối Codeforces API: ' + e.message };
+        }
+      }
+
+      if (provider === 'leetcode') {
+        try {
+          const resp = await fetch('https://leetcode.com/graphql/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              query: `query samekoList($skip:Int,$limit:Int,$filters:QuestionListFilterInput){questionList(categorySlug:"",skip:$skip,limit:$limit,filters:$filters){totalNum data{title titleSlug difficulty isPaidOnly questionFrontendId topicTags{name}}}}`,
+              variables: { skip: page * pageSize, limit: pageSize, filters: search ? { searchKeywords: search } : {} }
+            })
+          });
+          const json = await resp.json();
+          const list = json.data?.questionList;
+          if (list?.data) {
+            const items = list.data.map(p => ({
+              provider: 'leetcode',
+              id: p.titleSlug,
+              number: p.questionFrontendId,
+              title: p.title,
+              difficulty: p.difficulty,
+              paid: !!p.isPaidOnly,
+              tags: (p.topicTags || []).map(t => t.name)
+            }));
+            return { ok: true, data: { items, total: list.totalNum, page, pageSize } };
+          }
+        } catch (_) {}
+      }
+
+      return { ok: true, data: { items: [], total: 0, page: 0, pageSize } };
+    },
+
+    ojProblemDetail: async ({ provider, id }) => {
+      if (provider === 'codeforces') {
+        const match = /^(\d+)-([A-Za-z]\d*)$/.exec(id);
+        const url = match ? `https://codeforces.com/problemset/problem/${match[1]}/${match[2]}?locale=en` : `https://codeforces.com/problemset/problem/${id}`;
+        return {
+          ok: true,
+          data: {
+            provider: 'codeforces',
+            id,
+            url,
+            title: id,
+            mode: 'stdin',
+            html: `<div class="problem-statement"><div class="header"><div class="title">${id}</div></div><p>Đề bài Codeforces trực tiếp: <b>${id}</b>.</p><p>Bấm <b>Open official page</b> bên dưới để xem toàn bộ đề bài và test case chi tiết trực tiếp trên Codeforces.</p></div>`,
+            note: 'Public samples load automatically. Bấm Open official page để xem đề gốc.'
+          }
+        };
+      }
+      return {
+        ok: true,
+        data: {
+          provider: provider || 'codeforces',
+          id: id || '',
+          url: `https://codeforces.com/problemset`,
+          title: id || 'Problem',
+          mode: 'stdin',
+          html: `<p>Bấm Open official page để xem đề chi tiết.</p>`,
+          note: ''
+        }
+      };
+    },
+
+    ojOpenProblem: async ({ provider, id }) => {
+      let url = 'https://codeforces.com/problemset';
+      if (provider === 'codeforces' && id) {
+        const match = /^(\d+)-([A-Za-z]\d*)$/.exec(id);
+        url = match ? `https://codeforces.com/problemset/problem/${match[1]}/${match[2]}` : `https://codeforces.com/problemset`;
+      } else if (provider === 'leetcode' && id) {
+        url = `https://leetcode.com/problems/${id}/`;
+      } else if (provider === 'hackerrank' && id) {
+        url = `https://www.hackerrank.com/challenges/${id}/problem`;
+      }
+      window.open(url, '_blank');
+      return { ok: true, data: true };
+    },
+
+    ojStatementImage: async (url) => ({ ok: true, data: url }),
+    ojContestWorkspace: async () => ({ ok: true, data: true }),
+    ojContestStandings: async () => ({ ok: true, data: { rows: [] } }),
+    ccStartServer: async () => ({ ok: true }),
+    ccOpenExtensionPage: () => window.open('https://chromewebstore.google.com/detail/competitive-companion/cjnmckjndlpiamhfimnnachnkgngglja', '_blank'),
+    onProblemReceived: () => () => {}
   };
 
   // Lắng nghe sự kiện chuyển đổi Gmail để tự động nạp lại không gian VFS
