@@ -8,8 +8,8 @@
 const MarkdownPreview = {
     // UMD bundles: they set window.marked and window.DOMPurify.
     LIB_SCRIPTS: [
-        '../node_modules/marked/lib/marked.umd.js',
-        '../node_modules/dompurify/dist/purify.min.js',
+        'vendor/marked/lib/marked.umd.js',
+        'vendor/dompurify/dist/purify.min.js',
     ],
     LANG_ALIASES: { 'c++': 'cpp', cc: 'cpp', cxx: 'cpp', h: 'cpp', hpp: 'cpp', c: 'cpp', js: 'javascript', ts: 'typescript', py: 'python', sh: 'shell', bash: 'shell', ps1: 'powershell', yml: 'yaml', md: 'markdown', 'c#': 'csharp', cs: 'csharp' },
     RENDER_DELAY: 120,

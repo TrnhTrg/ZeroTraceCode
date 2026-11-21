@@ -12,7 +12,7 @@
  */
 
 const Motion = (() => {
-    const GSAP_PATH = '../node_modules/gsap/dist/gsap.min.js';
+    const GSAP_PATH = 'vendor/gsap/dist/gsap.min.js';
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     let gsap = null;
     let loading = null;

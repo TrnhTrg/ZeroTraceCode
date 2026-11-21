@@ -100,7 +100,7 @@ window.ProblemBrowser = (() => {
             for (const duplicate of parsed.querySelectorAll('.MathJax_Preview, .MathJax, .MathJax_Display, .MathJax_SVG, .MathJax_SVG_Display, .MJX_Assistive_MathML')) duplicate.remove();
             html = parsed.querySelector('.problem-statement')?.innerHTML || '';
         }
-        await loadScript('../node_modules/dompurify/dist/purify.min.js');
+        await loadScript('vendor/dompurify/dist/purify.min.js');
         const sanitized = window.DOMPurify.sanitize(html, {
             USE_PROFILES: { html: true, svg: true },
             FORBID_TAGS: ['style', 'script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'textarea', 'select', 'link', 'meta', 'base', 'video', 'audio'],
@@ -142,8 +142,8 @@ window.ProblemBrowser = (() => {
     }
     async function formatMath(html) {
         const doc=new DOMParser().parseFromString(html,'text/html');
-        await loadScript('../node_modules/katex/dist/katex.min.js');
-        await loadScript('../node_modules/katex/dist/contrib/auto-render.min.js');
+        await loadScript('vendor/katex/dist/katex.min.js');
+        await loadScript('vendor/katex/dist/contrib/auto-render.min.js');
         const options = { throwOnError: false, trust: false, strict: 'ignore', maxExpand: 1000, maxSize: 20, output: 'htmlAndMathml', macros:{'\\replacedVerb':'\\texttt{#1}'} };
         const renderFormula=(text,node,settings=options)=>{
             try{katex.render(text,node,settings);}catch(_){node.textContent=text;node.classList.add('statement-math-fallback');}

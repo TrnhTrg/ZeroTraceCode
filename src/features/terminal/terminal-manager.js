@@ -20,8 +20,8 @@ let isProcessRunning = false;
 // loaded once the editor is up and the page is idle, or on the first write
 // after start-up. Writes made before then are queued and replayed in order.
 const XTERM_SCRIPTS = [
-    '../node_modules/@xterm/xterm/lib/xterm.js',          // sets window.Terminal
-    '../node_modules/@xterm/addon-fit/lib/addon-fit.js',  // sets window.FitAddon
+    'vendor/@xterm/xterm/lib/xterm.js',          // sets window.Terminal
+    'vendor/@xterm/addon-fit/lib/addon-fit.js',  // sets window.FitAddon
 ];
 let mountTarget = null;  // { el, opts } recorded by initTerminal
 let queued = [];         // (term) => void calls waiting for the terminal
